@@ -20,7 +20,7 @@ export default [
     }
   },
   {
-    files: ['**/*.{js,jsx,vue}'],
+    files: ['**/*.{js,jsx,ts,tsx,vue}'],
     rules: {
       'vue/require-default-prop': 'off',
       'vue/multi-word-component-names': 'off'
