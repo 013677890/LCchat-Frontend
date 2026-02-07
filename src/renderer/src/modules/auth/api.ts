@@ -38,6 +38,17 @@ export interface RefreshTokenResponseData {
   expiresIn: number
 }
 
+export type VerifyCodeType = 1 | 2 | 3 | 4
+
+export interface SendVerifyCodeRequest {
+  email: string
+  type: VerifyCodeType
+}
+
+export interface SendVerifyCodeResponseData {
+  expireSeconds: number
+}
+
 export async function login(payload: LoginRequest): Promise<ApiResponse<LoginResponseData>> {
   const response = await httpClient.post<ApiResponse<LoginResponseData>>(
     '/api/v1/public/user/login',
@@ -51,6 +62,16 @@ export async function refreshToken(
 ): Promise<ApiResponse<RefreshTokenResponseData>> {
   const response = await httpClient.post<ApiResponse<RefreshTokenResponseData>>(
     '/api/v1/public/user/refresh-token',
+    payload
+  )
+  return response.data
+}
+
+export async function sendVerifyCode(
+  payload: SendVerifyCodeRequest
+): Promise<ApiResponse<SendVerifyCodeResponseData>> {
+  const response = await httpClient.post<ApiResponse<SendVerifyCodeResponseData>>(
+    '/api/v1/public/user/send-verify-code',
     payload
   )
   return response.data

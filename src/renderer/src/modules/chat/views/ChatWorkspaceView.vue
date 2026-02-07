@@ -8,6 +8,9 @@ import SidebarNav from '../components/SidebarNav.vue'
 import DetailPane from '../../contact/components/DetailPane.vue'
 import ListPane from '../../contact/components/ListPane.vue'
 import ProfileEditorCard from '../../profile/components/ProfileEditorCard.vue'
+import SecurityCenterCard from '../../security/components/SecurityCenterCard.vue'
+import { sendVerifyCode } from '../../auth/api'
+import { changeEmail, changePassword } from '../../security/api'
 import { useAppStore, type MainNavKey } from '../../../stores/app.store'
 import { useApplyStore } from '../../../stores/apply.store'
 import { useAuthStore } from '../../../stores/auth.store'
@@ -65,6 +68,11 @@ const deviceActionPendingId = ref('')
 const deviceActionError = ref('')
 const profileSavePending = ref(false)
 const profileSaveError = ref('')
+const securityMessage = ref('')
+const securityError = ref('')
+const sendingVerifyCode = ref(false)
+const changingEmail = ref(false)
+const changingPassword = ref(false)
 
 const { activeNav } = storeToRefs(appStore)
 const { userUuid, session } = storeToRefs(authStore)
@@ -325,6 +333,14 @@ const profileEditorData = computed<ProfileEditorData | null>(() => {
     signature: getString(payload, 'signature')
   }
 })
+
+const currentEmail = computed(() => {
+  if (!profile.value) {
+    return ''
+  }
+  return getString(profile.value.payload, 'email')
+})
+
 const settingDeviceItems = computed(() =>
   [...devices.value].sort((a, b) => Number(b.isCurrentDevice) - Number(a.isCurrentDevice))
 )
@@ -352,6 +368,11 @@ function handleBlacklistSelect(id: string): void {
 
 function handleProfileInput(): void {
   profileSaveError.value = ''
+}
+
+function clearSecurityFeedback(): void {
+  securityMessage.value = ''
+  securityError.value = ''
 }
 
 async function handleDraftChange(value: string): Promise<void> {
@@ -427,6 +448,64 @@ async function handleProfileSave(payload: UpdateMyProfileRequest): Promise<void>
   }
 }
 
+async function handleRequestEmailCode(nextEmail: string): Promise<void> {
+  if (!nextEmail || sendingVerifyCode.value) {
+    return
+  }
+
+  clearSecurityFeedback()
+  sendingVerifyCode.value = true
+  try {
+    await sendVerifyCode({
+      email: nextEmail,
+      type: 4
+    })
+    securityMessage.value = '验证码已发送，请查收新邮箱。'
+  } catch (error) {
+    securityError.value = normalizeErrorMessage(error)
+  } finally {
+    sendingVerifyCode.value = false
+  }
+}
+
+async function handleSubmitEmail(payload: { newEmail: string; verifyCode: string }): Promise<void> {
+  if (!userUuid.value || changingEmail.value) {
+    return
+  }
+
+  clearSecurityFeedback()
+  changingEmail.value = true
+  try {
+    await changeEmail(payload)
+    await userStore.syncFromServer(userUuid.value)
+    securityMessage.value = '邮箱已更新。'
+  } catch (error) {
+    securityError.value = normalizeErrorMessage(error)
+  } finally {
+    changingEmail.value = false
+  }
+}
+
+async function handleSubmitPassword(payload: {
+  oldPassword: string
+  newPassword: string
+}): Promise<void> {
+  if (changingPassword.value) {
+    return
+  }
+
+  clearSecurityFeedback()
+  changingPassword.value = true
+  try {
+    await changePassword(payload)
+    securityMessage.value = '密码修改成功。'
+  } catch (error) {
+    securityError.value = normalizeErrorMessage(error)
+  } finally {
+    changingPassword.value = false
+  }
+}
+
 async function handleKickDevice(targetDeviceId: string): Promise<void> {
   if (!targetDeviceId || deviceActionPendingId.value) {
     return
@@ -455,6 +534,7 @@ async function handleLogout(): Promise<void> {
   applyStore.reset()
   blacklistStore.reset()
   deviceStore.reset()
+  clearSecurityFeedback()
   await sessionStore.clearState()
   appStore.setActiveNav('chat')
   await router.replace({ name: 'login' })
@@ -601,6 +681,19 @@ onMounted(async () => {
               :error-message="profileSaveError"
               @clear-error="handleProfileInput"
               @submit="handleProfileSave"
+            />
+
+            <SecurityCenterCard
+              :current-email="currentEmail"
+              :sending-code="sendingVerifyCode"
+              :saving-email="changingEmail"
+              :saving-password="changingPassword"
+              :message="securityMessage"
+              :error-message="securityError"
+              @clear-feedback="clearSecurityFeedback"
+              @request-email-code="handleRequestEmailCode"
+              @submit-email="handleSubmitEmail"
+              @submit-password="handleSubmitPassword"
             />
 
             <section class="device-section">

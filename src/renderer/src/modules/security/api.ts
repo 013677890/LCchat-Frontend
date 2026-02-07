@@ -15,6 +15,20 @@ export interface GetDeviceListResponseData {
   devices: DeviceRecord[]
 }
 
+export interface ChangePasswordRequest {
+  oldPassword: string
+  newPassword: string
+}
+
+export interface ChangeEmailRequest {
+  newEmail: string
+  verifyCode: string
+}
+
+export interface ChangeEmailResponseData {
+  email: string
+}
+
 export async function fetchDevices(): Promise<ApiResponse<GetDeviceListResponseData>> {
   const response = await httpClient.get<ApiResponse<GetDeviceListResponseData>>(
     '/api/v1/auth/user/devices'
@@ -32,6 +46,24 @@ export async function logout(deviceId: string): Promise<ApiResponse<null>> {
 export async function kickDevice(deviceId: string): Promise<ApiResponse<null>> {
   const response = await httpClient.delete<ApiResponse<null>>(
     `/api/v1/auth/user/devices/${encodeURIComponent(deviceId)}`
+  )
+  return response.data
+}
+
+export async function changePassword(payload: ChangePasswordRequest): Promise<ApiResponse<null>> {
+  const response = await httpClient.post<ApiResponse<null>>(
+    '/api/v1/auth/user/change-password',
+    payload
+  )
+  return response.data
+}
+
+export async function changeEmail(
+  payload: ChangeEmailRequest
+): Promise<ApiResponse<ChangeEmailResponseData>> {
+  const response = await httpClient.post<ApiResponse<ChangeEmailResponseData>>(
+    '/api/v1/auth/user/change-email',
+    payload
   )
   return response.data
 }
