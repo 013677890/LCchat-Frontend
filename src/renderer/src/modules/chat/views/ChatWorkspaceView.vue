@@ -6,9 +6,12 @@ import ConversationPane from '../components/ConversationPane.vue'
 import MessagePane from '../components/MessagePane.vue'
 import SidebarNav from '../components/SidebarNav.vue'
 import { useAppStore, type MainNavKey } from '../../../stores/app.store'
+import { useApplyStore } from '../../../stores/apply.store'
 import { useAuthStore } from '../../../stores/auth.store'
+import { useBlacklistStore } from '../../../stores/blacklist.store'
 import { useFriendStore } from '../../../stores/friend.store'
 import { useSessionStore } from '../../../stores/session.store'
+import { useUserStore } from '../../../stores/user.store'
 import { formatConversationTime } from '../../../shared/utils/time'
 
 interface ConversationListItem {
@@ -21,12 +24,16 @@ interface ConversationListItem {
 
 const router = useRouter()
 const appStore = useAppStore()
+const applyStore = useApplyStore()
 const authStore = useAuthStore()
+const blacklistStore = useBlacklistStore()
 const friendStore = useFriendStore()
 const sessionStore = useSessionStore()
+const userStore = useUserStore()
 
 const { activeNav } = storeToRefs(appStore)
 const { userUuid } = storeToRefs(authStore)
+const { profile } = storeToRefs(userStore)
 const {
   conversations,
   activeConvId,
@@ -38,7 +45,16 @@ const {
 } =
   storeToRefs(sessionStore)
 
-const userLabel = computed(() => userUuid.value || '匿名用户')
+function getProfileNickname(): string {
+  if (!profile.value) {
+    return ''
+  }
+
+  const nickname = profile.value.payload.nickname
+  return typeof nickname === 'string' ? nickname : ''
+}
+
+const userLabel = computed(() => getProfileNickname() || userUuid.value || '匿名用户')
 
 const activeConversationTitle = computed(() => {
   if (!activeConversation.value) {
@@ -87,8 +103,20 @@ onMounted(async () => {
     return
   }
 
-  await sessionStore.bootstrap(authStore.userUuid)
-  await friendStore.syncFromServer(authStore.userUuid)
+  await Promise.all([
+    userStore.loadProfile(authStore.userUuid),
+    sessionStore.bootstrap(authStore.userUuid),
+    friendStore.loadFriends(authStore.userUuid),
+    blacklistStore.load(authStore.userUuid),
+    applyStore.loadInbox(authStore.userUuid)
+  ])
+
+  await Promise.all([
+    userStore.syncFromServer(authStore.userUuid),
+    friendStore.syncFromServer(authStore.userUuid),
+    blacklistStore.syncFromServer(authStore.userUuid),
+    applyStore.syncInboxFromServer(authStore.userUuid)
+  ])
 })
 </script>
 
