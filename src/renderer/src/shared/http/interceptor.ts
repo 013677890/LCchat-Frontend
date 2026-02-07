@@ -30,8 +30,7 @@ async function attachHeaders(
   const headers = nextConfig.headers as Record<string, string>
   headers['X-Device-ID'] = deviceId
 
-  const isFormDataRequest =
-    typeof FormData !== 'undefined' && nextConfig.data instanceof FormData
+  const isFormDataRequest = typeof FormData !== 'undefined' && nextConfig.data instanceof FormData
   if (!isFormDataRequest) {
     headers['Content-Type'] = 'application/json'
   } else if (typeof headers['Content-Type'] === 'string') {

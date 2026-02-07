@@ -1,8 +1,21 @@
 import { shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import type { JsonObject, ProfileRow } from '../../../shared/types/localdb'
-import { fetchMyProfile, updateMyProfile, uploadMyAvatar } from '../modules/profile/api'
+import {
+  fetchMyProfile,
+  fetchMyQRCode,
+  parseQRCode,
+  updateMyProfile,
+  uploadMyAvatar
+} from '../modules/profile/api'
 import type { UpdateMyProfileRequest, UserProfileDTO } from '../shared/types/user'
+import { extractQRCodeToken } from '../shared/utils/qrcode'
+
+export interface QRCodeState {
+  qrCode: string
+  token: string
+  expireAt: string
+}
 
 function toProfilePayload(userUuid: string, userInfo: UserProfileDTO): JsonObject {
   return {
@@ -42,9 +55,11 @@ function normalizeUpdatePayload(payload: UpdateMyProfileRequest): UpdateMyProfil
 
 export const useUserStore = defineStore('user', () => {
   const profile = shallowRef<ProfileRow | null>(null)
+  const qrCode = shallowRef<QRCodeState | null>(null)
 
   function reset(): void {
     profile.value = null
+    qrCode.value = null
   }
 
   async function loadProfile(userUuid: string): Promise<void> {
@@ -134,13 +149,45 @@ export const useUserStore = defineStore('user', () => {
     })
   }
 
+  async function loadQRCode(): Promise<void> {
+    const response = await fetchMyQRCode()
+    const qrCodeUrl = typeof response.data.qrCode === 'string' ? response.data.qrCode.trim() : ''
+    if (!qrCodeUrl) {
+      qrCode.value = null
+      return
+    }
+
+    qrCode.value = {
+      qrCode: qrCodeUrl,
+      token: extractQRCodeToken(qrCodeUrl),
+      expireAt: typeof response.data.expireAt === 'string' ? response.data.expireAt : ''
+    }
+  }
+
+  async function parseQRCodeToUserUuid(input: string): Promise<string> {
+    const token = extractQRCodeToken(input)
+    if (!token) {
+      throw new Error('请输入二维码链接或 Token')
+    }
+
+    const response = await parseQRCode({ token })
+    const userUuid = typeof response.data.uuid === 'string' ? response.data.uuid.trim() : ''
+    if (!userUuid) {
+      throw new Error('二维码解析失败，请重试')
+    }
+    return userUuid
+  }
+
   return {
     profile,
+    qrCode,
     reset,
     loadProfile,
     saveProfile,
     syncFromServer,
     updateProfile,
-    uploadAvatar
+    uploadAvatar,
+    loadQRCode,
+    parseQRCodeToUserUuid
   }
 })

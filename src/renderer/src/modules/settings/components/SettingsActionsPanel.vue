@@ -2,6 +2,7 @@
 import ProfileEditorCard, {
   type ProfileEditorViewData
 } from '../../profile/components/ProfileEditorCard.vue'
+import ProfileQRCodeCard from '../../profile/components/ProfileQRCodeCard.vue'
 import SecurityCenterCard, {
   type ChangeEmailPayload,
   type ChangePasswordPayload,
@@ -19,6 +20,13 @@ const props = defineProps<{
   profileSavePending?: boolean
   profileAvatarUploading?: boolean
   profileSaveError?: string
+  qrCodeUrl: string
+  qrCodeToken: string
+  qrCodeExpireAt: string
+  qrcodeLoading?: boolean
+  qrcodeParsing?: boolean
+  qrcodeMessage?: string
+  qrcodeError?: string
   currentEmail: string
   sendingVerifyCode?: boolean
   codeCooldownSeconds?: number
@@ -41,6 +49,9 @@ const emit = defineEmits<{
   ]
   profileUploadAvatar: [file: File]
   profileClearError: []
+  qrcodeClearFeedback: []
+  refreshQrCode: []
+  parseQrCode: [input: string]
   securityClearFeedback: []
   requestEmailCode: [email: string]
   submitEmail: [payload: ChangeEmailPayload]
@@ -95,6 +106,19 @@ function getLastSeenText(value: string): string {
       @clear-error="emit('profileClearError')"
       @submit="emit('profileSubmit', $event)"
       @upload-avatar="emit('profileUploadAvatar', $event)"
+    />
+
+    <ProfileQRCodeCard
+      :qr-code-url="props.qrCodeUrl"
+      :qr-code-token="props.qrCodeToken"
+      :expire-at="props.qrCodeExpireAt"
+      :loading="props.qrcodeLoading"
+      :parsing="props.qrcodeParsing"
+      :message="props.qrcodeMessage"
+      :error-message="props.qrcodeError"
+      @clear-feedback="emit('qrcodeClearFeedback')"
+      @refresh="emit('refreshQrCode')"
+      @parse="emit('parseQrCode', $event)"
     />
 
     <SecurityCenterCard

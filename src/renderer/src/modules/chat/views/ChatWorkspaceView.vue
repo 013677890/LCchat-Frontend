@@ -57,6 +57,7 @@ interface PaneItem {
 interface SearchResultItem {
   uuid: string
   nickname: string
+  avatar: string
   signature: string
   isFriend: boolean
   isOnline: boolean | null
@@ -117,7 +118,7 @@ const sentApplyMessage = ref('')
 
 const { activeNav } = storeToRefs(appStore)
 const { userUuid, session } = storeToRefs(authStore)
-const { profile } = storeToRefs(userStore)
+const { profile, qrCode } = storeToRefs(userStore)
 const { friends, tagSuggestions } = storeToRefs(friendStore)
 const { statusByUserUuid: presenceByUserUuid } = storeToRefs(presenceStore)
 const { items: blacklistItems } = storeToRefs(blacklistStore)
@@ -193,6 +194,7 @@ function mapSearchResult(item: SearchUserItemDTO): SearchResultItem {
   return {
     uuid: item.uuid,
     nickname: item.nickname || item.uuid,
+    avatar: item.avatar || '',
     signature: item.signature || '',
     isFriend: Boolean(item.isFriend),
     isOnline: null,
@@ -402,6 +404,7 @@ const settingsActions = useSettingsActions({
   friendStore,
   blacklistStore,
   deviceStore,
+  onQRCodeResolved: handleQRCodeResolved,
   onSignedOut: resetAndNavigateLogin
 })
 const {
@@ -412,6 +415,10 @@ const {
   profileSavePending,
   profileSaveError,
   avatarUploadPending,
+  qrcodeLoading,
+  qrcodeParsing,
+  qrcodeMessage,
+  qrcodeError,
   securityMessage,
   securityError,
   sendingVerifyCode,
@@ -421,11 +428,14 @@ const {
   deletingAccount,
   settingDeviceItems,
   clearProfileError,
+  clearQRCodeFeedback,
   clearSecurityFeedback,
   handleRemoveBlacklist,
   handleReloadDevices,
   handleProfileSave,
   handleProfileAvatarUpload,
+  handleLoadQRCode,
+  handleParseQRCode,
   handleRequestEmailCode,
   handleSubmitEmail,
   handleSubmitPassword,
@@ -442,6 +452,19 @@ const selectedBlacklistLabel = computed(() =>
     : ''
 )
 const tagSuggestionNames = computed(() => tagSuggestions.value.map((item) => item.tagName))
+
+watch(
+  () => activeNav.value,
+  (nextNav) => {
+    if (nextNav !== 'settings' || qrcodeLoading.value || qrCode.value) {
+      return
+    }
+
+    void handleLoadQRCode()
+  },
+  { immediate: true }
+)
+
 const contactRemarkChanged = computed(() => {
   if (!selectedFriendRow.value) {
     return false
@@ -731,6 +754,18 @@ async function handleSearchUsers(): Promise<void> {
   } finally {
     searchingUsers.value = false
   }
+}
+
+async function handleQRCodeResolved(targetUuid: string): Promise<void> {
+  const normalizedTarget = targetUuid.trim()
+  if (!normalizedTarget) {
+    return
+  }
+
+  appStore.setActiveNav('discover')
+  searchKeyword.value = normalizedTarget
+  clearSearchFeedback()
+  await handleSearchUsers()
 }
 
 async function ensureRemoteRelationAllowed(targetUuid: string): Promise<boolean> {
@@ -1132,6 +1167,13 @@ onBeforeUnmount(() => {
             :profile-save-pending="profileSavePending"
             :profile-avatar-uploading="avatarUploadPending"
             :profile-save-error="profileSaveError"
+            :qr-code-url="qrCode?.qrCode || ''"
+            :qr-code-token="qrCode?.token || ''"
+            :qr-code-expire-at="qrCode?.expireAt || ''"
+            :qrcode-loading="qrcodeLoading"
+            :qrcode-parsing="qrcodeParsing"
+            :qrcode-message="qrcodeMessage"
+            :qrcode-error="qrcodeError"
             :current-email="currentEmail"
             :sending-verify-code="sendingVerifyCode"
             :code-cooldown-seconds="codeCooldownSeconds"
@@ -1149,6 +1191,9 @@ onBeforeUnmount(() => {
             @profile-clear-error="handleProfileInput"
             @profile-submit="handleProfileSave"
             @profile-upload-avatar="handleProfileAvatarUpload"
+            @qrcode-clear-feedback="clearQRCodeFeedback"
+            @refresh-qr-code="handleLoadQRCode"
+            @parse-qr-code="handleParseQRCode"
             @security-clear-feedback="clearSecurityFeedback"
             @request-email-code="handleRequestEmailCode"
             @submit-email="handleSubmitEmail"

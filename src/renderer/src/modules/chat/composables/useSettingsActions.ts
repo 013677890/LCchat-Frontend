@@ -20,6 +20,7 @@ interface UseSettingsActionsOptions {
   friendStore: ReturnType<typeof useFriendStore>
   blacklistStore: ReturnType<typeof useBlacklistStore>
   deviceStore: ReturnType<typeof useDeviceStore>
+  onQRCodeResolved?: (userUuid: string) => Promise<void> | void
   onSignedOut: () => Promise<void>
 }
 
@@ -36,6 +37,10 @@ export function useSettingsActions(options: UseSettingsActionsOptions) {
   const profileSavePending = ref(false)
   const profileSaveError = ref('')
   const avatarUploadPending = ref(false)
+  const qrcodeLoading = ref(false)
+  const qrcodeParsing = ref(false)
+  const qrcodeMessage = ref('')
+  const qrcodeError = ref('')
   const securityMessage = ref('')
   const securityError = ref('')
   const sendingVerifyCode = ref(false)
@@ -58,6 +63,11 @@ export function useSettingsActions(options: UseSettingsActionsOptions) {
   function clearSecurityFeedback(): void {
     securityMessage.value = ''
     securityError.value = ''
+  }
+
+  function clearQRCodeFeedback(): void {
+    qrcodeMessage.value = ''
+    qrcodeError.value = ''
   }
 
   function stopCodeCooldown(): void {
@@ -157,6 +167,42 @@ export function useSettingsActions(options: UseSettingsActionsOptions) {
       profileSaveError.value = normalizeErrorMessage(error)
     } finally {
       avatarUploadPending.value = false
+    }
+  }
+
+  async function handleLoadQRCode(): Promise<void> {
+    if (qrcodeLoading.value) {
+      return
+    }
+
+    qrcodeLoading.value = true
+    clearQRCodeFeedback()
+    try {
+      await options.userStore.loadQRCode()
+    } catch (error) {
+      qrcodeError.value = normalizeErrorMessage(error)
+    } finally {
+      qrcodeLoading.value = false
+    }
+  }
+
+  async function handleParseQRCode(input: string): Promise<void> {
+    if (!input || qrcodeParsing.value) {
+      return
+    }
+
+    qrcodeParsing.value = true
+    clearQRCodeFeedback()
+    try {
+      const targetUuid = await options.userStore.parseQRCodeToUserUuid(input)
+      qrcodeMessage.value = `二维码解析成功：${targetUuid}`
+      if (options.onQRCodeResolved) {
+        await options.onQRCodeResolved(targetUuid)
+      }
+    } catch (error) {
+      qrcodeError.value = normalizeErrorMessage(error)
+    } finally {
+      qrcodeParsing.value = false
     }
   }
 
@@ -285,6 +331,9 @@ export function useSettingsActions(options: UseSettingsActionsOptions) {
     deviceActionPendingId.value = ''
     profileSaveError.value = ''
     avatarUploadPending.value = false
+    qrcodeLoading.value = false
+    qrcodeParsing.value = false
+    clearQRCodeFeedback()
     clearSecurityFeedback()
     stopCodeCooldown()
     codeCooldownSeconds.value = 0
@@ -302,6 +351,10 @@ export function useSettingsActions(options: UseSettingsActionsOptions) {
     profileSavePending,
     profileSaveError,
     avatarUploadPending,
+    qrcodeLoading,
+    qrcodeParsing,
+    qrcodeMessage,
+    qrcodeError,
     securityMessage,
     securityError,
     sendingVerifyCode,
@@ -311,11 +364,14 @@ export function useSettingsActions(options: UseSettingsActionsOptions) {
     deletingAccount,
     settingDeviceItems,
     clearProfileError,
+    clearQRCodeFeedback,
     clearSecurityFeedback,
     handleRemoveBlacklist,
     handleReloadDevices,
     handleProfileSave,
     handleProfileAvatarUpload,
+    handleLoadQRCode,
+    handleParseQRCode,
     handleRequestEmailCode,
     handleSubmitEmail,
     handleSubmitPassword,

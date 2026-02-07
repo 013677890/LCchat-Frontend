@@ -2,6 +2,7 @@
 interface SearchResultItem {
   uuid: string
   nickname: string
+  avatar: string
   signature: string
   isFriend: boolean
   isOnline: boolean | null
@@ -94,6 +95,10 @@ function handleSendApply(targetUuid: string): void {
 
     <ul v-if="props.results.length > 0" class="search-result-list">
       <li v-for="item in props.results" :key="item.uuid" class="search-result-item">
+        <div class="avatar-wrap">
+          <img v-if="item.avatar" :src="item.avatar" alt="avatar" />
+          <span v-else>{{ (item.nickname || item.uuid).slice(0, 1).toUpperCase() }}</span>
+        </div>
         <div class="search-result-meta">
           <strong>{{ item.nickname || item.uuid }}</strong>
           <p>{{ item.signature || item.uuid }}</p>
@@ -202,8 +207,37 @@ function handleSendApply(targetUuid: string): void {
   padding: 10px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 10px;
+}
+
+.avatar-wrap {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--c-border);
+  background: #eef1f4;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.avatar-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-wrap span {
+  color: var(--c-text-sub);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.search-result-meta {
+  flex: 1;
+  min-width: 0;
 }
 
 .search-result-meta strong {
