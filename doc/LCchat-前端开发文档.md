@@ -742,3 +742,14 @@ interface ApiResponse<T> {
    - 到达边界后自动停止，避免无限请求。
 3. 单测覆盖:
    - `src/renderer/src/stores/friend.store.spec.ts`（分页边界停止策略）
+
+### 17.5 已落地自动化测试映射（2026-02-07）
+
+1. 鉴权失败 / 登录超时:
+   - `src/renderer/src/stores/auth.store.spec.ts`
+2. 好友空列表 / 分页边界:
+   - `src/renderer/src/stores/friend.store.spec.ts`
+3. 申请未读数超时回退 / 申请分页边界:
+   - `src/renderer/src/stores/apply.store.spec.ts`
+4. 黑名单超时回退 / 黑名单分页边界:
+   - `src/renderer/src/stores/blacklist.store.spec.ts`

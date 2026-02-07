@@ -8,6 +8,7 @@ import SecurityCenterCard, {
   type DeleteAccountPayload
 } from '../../security/components/SecurityCenterCard.vue'
 import type { DeviceRecord } from '../../security/api'
+import { formatLastSeenAt } from '../../../shared/utils/presence'
 
 const props = defineProps<{
   hasSelectedBlacklist: boolean
@@ -61,6 +62,10 @@ function getDeviceStatusLabel(status: number): string {
     return '已被下线'
   }
   return `未知(${status})`
+}
+
+function getLastSeenText(value: string): string {
+  return formatLastSeenAt(value) || '-'
 }
 </script>
 
@@ -125,7 +130,7 @@ function getDeviceStatusLabel(status: number): string {
             <p>{{ item.platform || '-' }} · {{ item.appVersion || '-' }}</p>
             <small
               >{{ getDeviceStatusLabel(item.status) }} · 最近活跃
-              {{ item.lastSeenAt || '-' }}</small
+              {{ getLastSeenText(item.lastSeenAt) }}</small
             >
           </div>
           <div class="device-actions">
