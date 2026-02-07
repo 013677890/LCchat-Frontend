@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+
 interface ListPaneItem {
   id: string
   title: string
@@ -8,10 +10,18 @@ interface ListPaneItem {
   online?: boolean
 }
 
+interface ListPaneGroup {
+  key: string
+  label: string
+  hint?: string
+  items: ListPaneItem[]
+}
+
 const props = defineProps<{
   title: string
   hint?: string
   items: ListPaneItem[]
+  groups?: ListPaneGroup[]
   selectedId: string
   emptyText: string
   loading?: boolean
@@ -24,16 +34,58 @@ const emit = defineEmits<{
 function handleSelect(id: string): void {
   emit('select', id)
 }
+
+const totalCount = computed(() => {
+  if (!props.groups || props.groups.length === 0) {
+    return props.items.length
+  }
+
+  return props.groups.reduce((sum, group) => sum + group.items.length, 0)
+})
 </script>
 
 <template>
   <section class="pane">
     <header class="header">
       <h1>{{ props.title }}</h1>
-      <span class="hint">{{ props.hint || `${props.items.length} 条` }}</span>
+      <span class="hint">{{ props.hint || `${totalCount} 条` }}</span>
     </header>
 
     <p v-if="props.loading" class="empty">加载中...</p>
+    <div v-else-if="(props.groups || []).length > 0 && totalCount > 0" class="group-list">
+      <section v-for="group in props.groups" :key="group.key" class="group-block">
+        <header class="group-header">
+          <strong>{{ group.label }}</strong>
+          <span>{{ group.hint || `${group.items.length} 人` }}</span>
+        </header>
+        <ul class="list">
+          <li v-for="item in group.items" :key="item.id">
+            <button
+              class="item"
+              :class="{ 'item--active': item.id === props.selectedId }"
+              type="button"
+              @click="handleSelect(item.id)"
+            >
+              <div class="item-head">
+                <div class="item-title">
+                  <span
+                    v-if="typeof item.online === 'boolean'"
+                    class="presence-dot"
+                    :class="item.online ? 'presence-dot--online' : 'presence-dot--offline'"
+                  />
+                  <strong>{{ item.title }}</strong>
+                </div>
+                <span v-if="item.meta">{{ item.meta }}</span>
+              </div>
+              <div class="item-body">
+                <p>{{ item.subtitle || '-' }}</p>
+                <small v-if="(item.badge || 0) > 0">{{ item.badge }}</small>
+              </div>
+            </button>
+          </li>
+        </ul>
+      </section>
+    </div>
     <ul v-else-if="props.items.length > 0" class="list">
       <li v-for="item in props.items" :key="item.id">
         <button
@@ -98,6 +150,42 @@ function handleSelect(id: string): void {
   margin: 0;
   padding: 8px 0;
   overflow-y: auto;
+}
+
+.group-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.group-block + .group-block {
+  margin-top: 6px;
+}
+
+.group-list .list {
+  padding: 0;
+  overflow: visible;
+}
+
+.group-header {
+  height: 28px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--c-text-muted);
+  border-top: 1px solid rgba(229, 231, 235, 0.45);
+  border-bottom: 1px solid rgba(229, 231, 235, 0.45);
+  background: rgba(248, 250, 252, 0.9);
+}
+
+.group-header strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.group-header span {
+  font-size: 11px;
 }
 
 .item {

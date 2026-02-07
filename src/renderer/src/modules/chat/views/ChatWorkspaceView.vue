@@ -16,6 +16,11 @@ import {
   sendFriendApply,
   type SearchUserItemDTO
 } from '../../contact/api'
+import {
+  buildFriendGroups,
+  type FriendGroup,
+  type FriendGroupItem
+} from '../../contact/utils/friend-grouping'
 import { resolveRelationErrorMessage } from '../../contact/error-message'
 import { useSettingsActions } from '../composables/useSettingsActions'
 import { useAppStore, type MainNavKey } from '../../../stores/app.store'
@@ -46,6 +51,7 @@ interface PaneItem {
   meta?: string
   badge?: number
   online?: boolean
+  groupTag?: string
 }
 
 interface SearchResultItem {
@@ -247,14 +253,24 @@ const friendPaneItems = computed<PaneItem[]>(() =>
     const presenceState = getPresenceState(row.peerUuid)
     const signature = getString(row.payload, 'signature') || ''
     const presenceText = formatPresenceStatusText(presenceState)
+    const groupTag = getString(row.payload, 'groupTag') || '未分组'
     return {
       id: row.peerUuid,
       title: getString(row.payload, 'remark') || getString(row.payload, 'nickname') || row.peerUuid,
       subtitle: signature ? `${presenceText} · ${signature}` : presenceText,
-      meta: getString(row.payload, 'groupTag') || '未分组',
-      online: presenceState.isOnline === true
+      online: presenceState.isOnline === true,
+      groupTag
     }
   })
+)
+const friendPaneGroups = computed<FriendGroup<PaneItem & FriendGroupItem>[]>(() =>
+  buildFriendGroups(
+    friendPaneItems.value as Array<PaneItem & FriendGroupItem>,
+    tagSuggestionNames.value
+  )
+)
+const friendListHint = computed(
+  () => `${friendPaneItems.value.length} 位好友 · ${friendPaneGroups.value.length} 组`
 )
 
 const applyPaneItems = computed<PaneItem[]>(() =>
@@ -933,7 +949,9 @@ onBeforeUnmount(() => {
     <template v-else-if="activeNav === 'contacts'">
       <ListPane
         title="通讯录"
+        :hint="friendListHint"
         :items="friendPaneItems"
+        :groups="friendPaneGroups"
         :selected-id="selectedFriendId"
         :loading="false"
         empty-text="暂无好友"

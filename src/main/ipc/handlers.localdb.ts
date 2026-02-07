@@ -79,6 +79,68 @@ function upsertSyncState(userUuid: string, domain: string, lastVersion: number):
   })
 }
 
+function upsertApplyRows(
+  userUuid: string,
+  direction: 'inbox' | 'outbox',
+  rows: FriendApplyRow[]
+): void {
+  const db = getLocalDB()
+  const upsertApplies = db.transaction((inputRows: FriendApplyRow[]) => {
+    const stmt = db.prepare(
+      `INSERT INTO friend_applies(user_uuid, apply_id, direction, status, payload_json, updated_at)
+       VALUES(@user_uuid, @apply_id, @direction, @status, @payload_json, @updated_at)
+       ON CONFLICT(user_uuid, apply_id, direction) DO UPDATE SET
+         status = excluded.status,
+         payload_json = excluded.payload_json,
+         updated_at = excluded.updated_at`
+    )
+
+    for (const item of inputRows) {
+      stmt.run({
+        user_uuid: userUuid,
+        apply_id: item.applyId,
+        direction,
+        status: item.status,
+        payload_json: serializePayload(item.payload),
+        updated_at: item.updatedAt || now()
+      })
+    }
+  })
+
+  upsertApplies(rows)
+}
+
+function replaceApplyRows(
+  userUuid: string,
+  direction: 'inbox' | 'outbox',
+  rows: FriendApplyRow[]
+): void {
+  const db = getLocalDB()
+  const replaceApplies = db.transaction((inputRows: FriendApplyRow[]) => {
+    db.prepare(`DELETE FROM friend_applies WHERE user_uuid = ? AND direction = ?`).run(
+      userUuid,
+      direction
+    )
+    const stmt = db.prepare(
+      `INSERT INTO friend_applies(user_uuid, apply_id, direction, status, payload_json, updated_at)
+       VALUES(@user_uuid, @apply_id, @direction, @status, @payload_json, @updated_at)`
+    )
+
+    for (const item of inputRows) {
+      stmt.run({
+        user_uuid: userUuid,
+        apply_id: item.applyId,
+        direction,
+        status: item.status,
+        payload_json: serializePayload(item.payload),
+        updated_at: item.updatedAt || now()
+      })
+    }
+  })
+
+  replaceApplies(rows)
+}
+
 export function registerLocalDBHandlers(ipcMain: IpcMain): void {
   bind(ipcMain, IPC_CHANNELS.localdb.init, () => {
     initLocalDB()
@@ -237,30 +299,15 @@ export function registerLocalDBHandlers(ipcMain: IpcMain): void {
     ipcMain,
     IPC_CHANNELS.localdb.applies.upsertInbox,
     (userUuid: string, items: FriendApplyRow[]) => {
-      const db = getLocalDB()
-      const upsertInbox = db.transaction((rows: FriendApplyRow[]) => {
-        const stmt = db.prepare(
-          `INSERT INTO friend_applies(user_uuid, apply_id, direction, status, payload_json, updated_at)
-           VALUES(@user_uuid, @apply_id, @direction, @status, @payload_json, @updated_at)
-           ON CONFLICT(user_uuid, apply_id, direction) DO UPDATE SET
-             status = excluded.status,
-             payload_json = excluded.payload_json,
-             updated_at = excluded.updated_at`
-        )
+      upsertApplyRows(userUuid, 'inbox', items)
+    }
+  )
 
-        for (const item of rows) {
-          stmt.run({
-            user_uuid: userUuid,
-            apply_id: item.applyId,
-            direction: item.direction || 'inbox',
-            status: item.status,
-            payload_json: serializePayload(item.payload),
-            updated_at: item.updatedAt || now()
-          })
-        }
-      })
-
-      upsertInbox(items)
+  bind(
+    ipcMain,
+    IPC_CHANNELS.localdb.applies.replaceInbox,
+    (userUuid: string, items: FriendApplyRow[]) => {
+      replaceApplyRows(userUuid, 'inbox', items)
     }
   )
 
@@ -295,30 +342,15 @@ export function registerLocalDBHandlers(ipcMain: IpcMain): void {
     ipcMain,
     IPC_CHANNELS.localdb.applies.upsertSent,
     (userUuid: string, items: FriendApplyRow[]) => {
-      const db = getLocalDB()
-      const upsertSent = db.transaction((rows: FriendApplyRow[]) => {
-        const stmt = db.prepare(
-          `INSERT INTO friend_applies(user_uuid, apply_id, direction, status, payload_json, updated_at)
-           VALUES(@user_uuid, @apply_id, @direction, @status, @payload_json, @updated_at)
-           ON CONFLICT(user_uuid, apply_id, direction) DO UPDATE SET
-             status = excluded.status,
-             payload_json = excluded.payload_json,
-             updated_at = excluded.updated_at`
-        )
+      upsertApplyRows(userUuid, 'outbox', items)
+    }
+  )
 
-        for (const item of rows) {
-          stmt.run({
-            user_uuid: userUuid,
-            apply_id: item.applyId,
-            direction: item.direction || 'outbox',
-            status: item.status,
-            payload_json: serializePayload(item.payload),
-            updated_at: item.updatedAt || now()
-          })
-        }
-      })
-
-      upsertSent(items)
+  bind(
+    ipcMain,
+    IPC_CHANNELS.localdb.applies.replaceSent,
+    (userUuid: string, items: FriendApplyRow[]) => {
+      replaceApplyRows(userUuid, 'outbox', items)
     }
   )
 

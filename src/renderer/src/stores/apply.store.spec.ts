@@ -23,8 +23,10 @@ const fetchSentApplyListMock = vi.mocked(fetchSentApplyList)
 
 const getInboxMock = vi.fn().mockResolvedValue([])
 const upsertInboxMock = vi.fn().mockResolvedValue(undefined)
+const replaceInboxMock = vi.fn().mockResolvedValue(undefined)
 const getSentMock = vi.fn().mockResolvedValue([])
 const upsertSentMock = vi.fn().mockResolvedValue(undefined)
+const replaceSentMock = vi.fn().mockResolvedValue(undefined)
 
 function setupWindowApi(): void {
   ;(globalThis as { window?: unknown }).window = {
@@ -33,8 +35,10 @@ function setupWindowApi(): void {
         applies: {
           getInbox: getInboxMock,
           upsertInbox: upsertInboxMock,
+          replaceInbox: replaceInboxMock,
           getSent: getSentMock,
-          upsertSent: upsertSentMock
+          upsertSent: upsertSentMock,
+          replaceSent: replaceSentMock
         }
       }
     }
@@ -106,7 +110,8 @@ describe('apply.store', () => {
       page: 50,
       pageSize: 100
     })
-    expect(getInboxMock).toHaveBeenCalledWith('user-1')
+    expect(replaceInboxMock).toHaveBeenCalledWith('user-1', [])
+    expect(getInboxMock).not.toHaveBeenCalledWith('user-1')
     expect(store.unreadCount).toBe(0)
     expect(store.unreadCountSynced).toBe(true)
   })
@@ -140,6 +145,35 @@ describe('apply.store', () => {
       page: 50,
       pageSize: 100
     })
-    expect(getSentMock).toHaveBeenCalledWith('user-1')
+    expect(replaceSentMock).toHaveBeenCalledWith('user-1', [])
+    expect(getSentMock).not.toHaveBeenCalledWith('user-1')
+  })
+
+  it('clears stale local inbox when server returns empty list', async () => {
+    getInboxMock.mockResolvedValueOnce([createInboxRow(101, false)])
+    fetchFriendApplyListMock.mockResolvedValue({
+      data: {
+        items: [],
+        pagination: {
+          page: 1,
+          pageSize: 100,
+          total: 0,
+          totalPages: 1
+        }
+      }
+    } as never)
+    fetchUnreadApplyCountMock.mockResolvedValue({
+      data: {
+        unreadCount: 0
+      }
+    } as never)
+
+    const store = useApplyStore()
+    await store.loadInbox('user-1')
+    expect(store.inbox.length).toBe(1)
+
+    await store.syncInboxFromServer('user-1')
+    expect(replaceInboxMock).toHaveBeenCalledWith('user-1', [])
+    expect(store.inbox).toEqual([])
   })
 })

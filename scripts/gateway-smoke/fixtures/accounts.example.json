@@ -1,0 +1,7 @@
+{
+  "deviceId": "lcchat-smoke-device",
+  "login": {
+    "account": "demo@test.com",
+    "password": "123456"
+  }
+}

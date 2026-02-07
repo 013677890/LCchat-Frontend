@@ -7,3 +7,5 @@ out
 .agents
 .npm-cache
 *.tsbuildinfo
+scripts/gateway-smoke/fixtures/accounts.local.json
+scripts/gateway-smoke/fixtures/last-run-report.json

@@ -146,6 +146,17 @@ export const useApplyStore = defineStore('apply', () => {
     unreadCount.value = countUnreadRows(inbox.value)
   }
 
+  async function replaceInbox(userUuid: string, rows: FriendApplyRow[]): Promise<void> {
+    try {
+      await window.api.localdb.applies.replaceInbox(userUuid, rows)
+    } catch (error) {
+      console.warn('replace inbox applies in localdb failed', error)
+    }
+
+    inbox.value = [...rows].sort((a, b) => b.updatedAt - a.updatedAt)
+    unreadCount.value = countUnreadRows(inbox.value)
+  }
+
   async function loadSent(userUuid: string): Promise<void> {
     if (!userUuid) {
       sent.value = []
@@ -178,6 +189,16 @@ export const useApplyStore = defineStore('apply', () => {
     sent.value = Array.from(rowById.values()).sort((a, b) => b.updatedAt - a.updatedAt)
   }
 
+  async function replaceSent(userUuid: string, rows: FriendApplyRow[]): Promise<void> {
+    try {
+      await window.api.localdb.applies.replaceSent(userUuid, rows)
+    } catch (error) {
+      console.warn('replace sent applies in localdb failed', error)
+    }
+
+    sent.value = [...rows].sort((a, b) => b.updatedAt - a.updatedAt)
+  }
+
   async function syncInboxFromServer(userUuid: string): Promise<void> {
     if (!userUuid) {
       return
@@ -187,6 +208,7 @@ export const useApplyStore = defineStore('apply', () => {
     let totalPages = 1
     const pageSize = 100
     const allRows: FriendApplyRow[] = []
+    let fetchedAnyPage = false
 
     while (page <= totalPages && page <= 50) {
       let response
@@ -201,6 +223,8 @@ export const useApplyStore = defineStore('apply', () => {
         break
       }
 
+      fetchedAnyPage = true
+
       for (const item of response.data.items ?? []) {
         allRows.push(mapApplyToRow(userUuid, item))
       }
@@ -209,8 +233,8 @@ export const useApplyStore = defineStore('apply', () => {
       page += 1
     }
 
-    if (allRows.length > 0) {
-      await upsertInbox(userUuid, allRows)
+    if (fetchedAnyPage) {
+      await replaceInbox(userUuid, allRows)
     } else {
       await loadInbox(userUuid)
     }
@@ -227,6 +251,7 @@ export const useApplyStore = defineStore('apply', () => {
     let totalPages = 1
     const pageSize = 100
     const allRows: FriendApplyRow[] = []
+    let fetchedAnyPage = false
 
     while (page <= totalPages && page <= 50) {
       let response
@@ -241,6 +266,8 @@ export const useApplyStore = defineStore('apply', () => {
         break
       }
 
+      fetchedAnyPage = true
+
       for (const item of response.data.items ?? []) {
         allRows.push(mapSentApplyToRow(userUuid, item))
       }
@@ -249,12 +276,11 @@ export const useApplyStore = defineStore('apply', () => {
       page += 1
     }
 
-    if (allRows.length > 0) {
-      await upsertSent(userUuid, allRows)
-      return
+    if (fetchedAnyPage) {
+      await replaceSent(userUuid, allRows)
+    } else {
+      await loadSent(userUuid)
     }
-
-    await loadSent(userUuid)
   }
 
   async function markAsRead(userUuid: string, applyIds: number[]): Promise<void> {
@@ -378,7 +404,9 @@ export const useApplyStore = defineStore('apply', () => {
     loadInbox,
     loadSent,
     upsertInbox,
+    replaceInbox,
     upsertSent,
+    replaceSent,
     syncInboxFromServer,
     syncSentFromServer,
     syncUnreadCountFromServer,

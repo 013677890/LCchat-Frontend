@@ -36,8 +36,10 @@ export interface BridgeApi {
     applies: {
       getInbox: (userUuid: string) => Promise<FriendApplyRow[]>
       upsertInbox: (userUuid: string, items: FriendApplyRow[]) => Promise<void>
+      replaceInbox: (userUuid: string, items: FriendApplyRow[]) => Promise<void>
       getSent: (userUuid: string) => Promise<FriendApplyRow[]>
       upsertSent: (userUuid: string, items: FriendApplyRow[]) => Promise<void>
+      replaceSent: (userUuid: string, items: FriendApplyRow[]) => Promise<void>
     }
     blacklist: {
       getList: (userUuid: string) => Promise<BlacklistRow[]>

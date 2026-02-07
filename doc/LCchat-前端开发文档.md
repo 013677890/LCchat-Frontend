@@ -753,3 +753,37 @@ interface ApiResponse<T> {
    - `src/renderer/src/stores/apply.store.spec.ts`
 4. 黑名单超时回退 / 黑名单分页边界:
    - `src/renderer/src/stores/blacklist.store.spec.ts`
+
+---
+
+## 18. 真实网关联调脚本（可复跑）
+
+### 18.1 目标场景
+
+1. 鉴权失败（401）
+2. 接口超时（客户端严格超时配置）
+3. 分页上限（`page=50&pageSize=100`）
+
+### 18.2 脚本与测试数据位置
+
+1. 运行脚本: `scripts/gateway-smoke/run.mjs`
+2. 固化用例: `scripts/gateway-smoke/fixtures/cases.json`
+3. 固化账号模板: `scripts/gateway-smoke/fixtures/accounts.example.json`
+4. 运行报告: `scripts/gateway-smoke/fixtures/last-run-report.json`
+
+### 18.3 运行方式
+
+1. 可选: 在 `scripts/gateway-smoke/fixtures/` 下准备 `accounts.local.json`（覆盖模板账号）。
+2. 可选环境变量:
+   - `LCCHAT_GATEWAY_BASE_URL`（默认 `http://127.0.0.1:8080`）
+   - `LCCHAT_TEST_ACCESS_TOKEN`（优先级高于账号登录）
+   - `LCCHAT_GATEWAY_DEFAULT_TIMEOUT_MS`（默认 `5000`）
+3. 执行命令:
+   - `npm run test:gateway:smoke`
+
+### 18.4 判定规则
+
+1. `httpStatusIn`：HTTP 状态码白名单校验。
+2. `businessCodeIn`：网关业务码白名单校验。
+3. `timeout=true`：要求请求抛出超时错误（`ECONNABORTED` 或 timeout 关键字）。
+4. 所有失败用例会写入 `last-run-report.json`，用于重复排查与回归对比。

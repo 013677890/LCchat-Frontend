@@ -10,6 +10,7 @@
     "lint": "eslint --cache .",
     "typecheck": "vue-tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.node.json",
     "test:unit": "vitest",
+    "test:gateway:smoke": "node ./scripts/gateway-smoke/run.mjs",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "electron-vite build",

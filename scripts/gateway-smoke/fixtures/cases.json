@@ -1,0 +1,41 @@
+[
+  {
+    "id": "auth_401_without_token",
+    "title": "鉴权接口无 Token 返回 401",
+    "method": "GET",
+    "path": "/api/v1/auth/user/profile",
+    "expect": {
+      "httpStatusIn": [401]
+    }
+  },
+  {
+    "id": "timeout_friend_list_strict_timeout",
+    "title": "好友列表在严格超时下触发 timeout",
+    "method": "GET",
+    "path": "/api/v1/auth/friend/list",
+    "query": {
+      "page": 1,
+      "pageSize": 100
+    },
+    "auth": "bearer_valid",
+    "timeoutMs": 1,
+    "expect": {
+      "timeout": true
+    }
+  },
+  {
+    "id": "pagination_upper_bound_page_50",
+    "title": "好友列表分页上限请求（page=50,pageSize=100）",
+    "method": "GET",
+    "path": "/api/v1/auth/friend/list",
+    "query": {
+      "page": 50,
+      "pageSize": 100
+    },
+    "auth": "bearer_valid",
+    "expect": {
+      "httpStatusIn": [200],
+      "businessCodeIn": [0]
+    }
+  }
+]
