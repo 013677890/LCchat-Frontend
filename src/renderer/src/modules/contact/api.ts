@@ -67,6 +67,45 @@ export interface DeleteFriendRequest {
   userUuid: string
 }
 
+export interface SetFriendRemarkRequest {
+  userUuid: string
+  remark: string
+}
+
+export interface SetFriendTagRequest {
+  userUuid: string
+  groupTag: string
+}
+
+export interface SearchUserParams {
+  keyword: string
+  page?: number
+  pageSize?: number
+}
+
+export interface SearchUserItemDTO {
+  uuid: string
+  nickname: string
+  avatar: string
+  signature: string
+  isFriend: boolean
+}
+
+export interface SearchUserResponseData {
+  items: SearchUserItemDTO[]
+  pagination: PaginationDTO | null
+}
+
+export interface SendFriendApplyRequest {
+  targetUuid: string
+  reason?: string
+  source?: string
+}
+
+export interface SendFriendApplyResponseData {
+  applyId: number
+}
+
 export async function fetchFriendList(
   params: GetFriendListParams = {}
 ): Promise<ApiResponse<GetFriendListResponseData>> {
@@ -119,5 +158,37 @@ export async function markFriendApplyRead(
 
 export async function deleteFriend(payload: DeleteFriendRequest): Promise<ApiResponse<null>> {
   const response = await httpClient.post<ApiResponse<null>>('/api/v1/auth/friend/delete', payload)
+  return response.data
+}
+
+export async function setFriendRemark(payload: SetFriendRemarkRequest): Promise<ApiResponse<null>> {
+  const response = await httpClient.post<ApiResponse<null>>('/api/v1/auth/friend/remark', payload)
+  return response.data
+}
+
+export async function setFriendTag(payload: SetFriendTagRequest): Promise<ApiResponse<null>> {
+  const response = await httpClient.post<ApiResponse<null>>('/api/v1/auth/friend/tag', payload)
+  return response.data
+}
+
+export async function searchUsers(
+  params: SearchUserParams
+): Promise<ApiResponse<SearchUserResponseData>> {
+  const response = await httpClient.get<ApiResponse<SearchUserResponseData>>(
+    '/api/v1/auth/user/search',
+    {
+      params
+    }
+  )
+  return response.data
+}
+
+export async function sendFriendApply(
+  payload: SendFriendApplyRequest
+): Promise<ApiResponse<SendFriendApplyResponseData>> {
+  const response = await httpClient.post<ApiResponse<SendFriendApplyResponseData>>(
+    '/api/v1/auth/friend/apply',
+    payload
+  )
   return response.data
 }

@@ -10,6 +10,7 @@ import ListPane from '../../contact/components/ListPane.vue'
 import ProfileEditorCard from '../../profile/components/ProfileEditorCard.vue'
 import SecurityCenterCard from '../../security/components/SecurityCenterCard.vue'
 import { sendVerifyCode } from '../../auth/api'
+import { searchUsers, sendFriendApply, type SearchUserItemDTO } from '../../contact/api'
 import { resolveRelationErrorMessage } from '../../contact/error-message'
 import { changeEmail, changePassword, deleteAccount } from '../../security/api'
 import { isSendTooFrequentError, resolveSecurityErrorMessage } from '../../security/error-message'
@@ -41,6 +42,13 @@ interface PaneItem {
   badge?: number
 }
 
+interface SearchResultItem {
+  uuid: string
+  nickname: string
+  signature: string
+  isFriend: boolean
+}
+
 interface ProfileEditorData {
   uuid: string
   email: string
@@ -68,6 +76,15 @@ const applyActionPending = ref(false)
 const applyActionError = ref('')
 const contactActionPending = ref(false)
 const contactActionError = ref('')
+const contactRemarkDraft = ref('')
+const contactTagDraft = ref('')
+const searchKeyword = ref('')
+const searchReasonDraft = ref('我是 LCchat 用户')
+const searchResults = ref<SearchResultItem[]>([])
+const searchingUsers = ref(false)
+const sendingApplyTarget = ref('')
+const searchError = ref('')
+const searchMessage = ref('')
 const blacklistActionPending = ref(false)
 const blacklistActionError = ref('')
 const deviceActionPendingId = ref('')
@@ -86,7 +103,7 @@ let codeCooldownTimer: ReturnType<typeof setInterval> | null = null
 const { activeNav } = storeToRefs(appStore)
 const { userUuid, session } = storeToRefs(authStore)
 const { profile } = storeToRefs(userStore)
-const { friends } = storeToRefs(friendStore)
+const { friends, tagSuggestions } = storeToRefs(friendStore)
 const { items: blacklistItems } = storeToRefs(blacklistStore)
 const { devices, loading: deviceLoading } = storeToRefs(deviceStore)
 const { inbox: applyInbox } = storeToRefs(applyStore)
@@ -142,6 +159,23 @@ function getDeviceStatusLabel(status: number): string {
     return '已被下线'
   }
   return `未知(${status})`
+}
+
+function mapSearchResult(item: SearchUserItemDTO): SearchResultItem {
+  return {
+    uuid: item.uuid,
+    nickname: item.nickname || item.uuid,
+    signature: item.signature || '',
+    isFriend: Boolean(item.isFriend)
+  }
+}
+
+function isExistingFriend(peerUuid: string): boolean {
+  return friends.value.some((item) => item.peerUuid === peerUuid)
+}
+
+function isPeerInBlacklist(peerUuid: string): boolean {
+  return blacklistItems.value.some((item) => item.peerUuid === peerUuid)
 }
 
 function formatDateTime(timestamp: number): string {
@@ -259,9 +293,38 @@ const selectedApplyRow = computed(
 const selectedBlacklistRow = computed(
   () => blacklistItems.value.find((item) => item.peerUuid === selectedBlacklistId.value) ?? null
 )
+const tagSuggestionNames = computed(() => tagSuggestions.value.map((item) => item.tagName))
+const contactRemarkChanged = computed(() => {
+  if (!selectedFriendRow.value) {
+    return false
+  }
+  return contactRemarkDraft.value.trim() !== getString(selectedFriendRow.value.payload, 'remark')
+})
+const contactTagChanged = computed(() => {
+  if (!selectedFriendRow.value) {
+    return false
+  }
+  return contactTagDraft.value.trim() !== getString(selectedFriendRow.value.payload, 'groupTag')
+})
 const selectedApplyIsPending = computed(() => selectedApplyRow.value?.status === 0)
 const selectedApplyIsRead = computed(() =>
   selectedApplyRow.value ? getBoolean(selectedApplyRow.value.payload, 'isRead') : true
+)
+
+watch(
+  selectedFriendRow,
+  (row) => {
+    if (!row) {
+      contactRemarkDraft.value = ''
+      contactTagDraft.value = ''
+      return
+    }
+
+    contactRemarkDraft.value = getString(row.payload, 'remark')
+    contactTagDraft.value = getString(row.payload, 'groupTag')
+    contactActionError.value = ''
+  },
+  { immediate: true }
 )
 
 const contactDetailLines = computed(() => {
@@ -379,6 +442,19 @@ function handleBlacklistSelect(id: string): void {
 
 function handleProfileInput(): void {
   profileSaveError.value = ''
+}
+
+function handleContactInput(): void {
+  contactActionError.value = ''
+}
+
+function clearSearchFeedback(): void {
+  searchError.value = ''
+  searchMessage.value = ''
+}
+
+function handleSearchInput(): void {
+  clearSearchFeedback()
 }
 
 function clearSecurityFeedback(): void {
@@ -504,6 +580,114 @@ async function handleAddBlacklist(): Promise<void> {
   }
 }
 
+async function handleSearchUsers(): Promise<void> {
+  const keyword = searchKeyword.value.trim()
+  if (!keyword || searchingUsers.value) {
+    return
+  }
+
+  clearSearchFeedback()
+  searchingUsers.value = true
+  try {
+    const response = await searchUsers({
+      keyword,
+      page: 1,
+      pageSize: 30
+    })
+
+    const allItems = (response.data.items ?? []).map(mapSearchResult)
+    searchResults.value = allItems.filter((item) => item.uuid && item.uuid !== userUuid.value)
+    if (searchResults.value.length === 0) {
+      searchMessage.value = '没有找到匹配用户。'
+    }
+  } catch (error) {
+    searchError.value = normalizeErrorMessage(error)
+  } finally {
+    searchingUsers.value = false
+  }
+}
+
+async function handleSendFriendApply(targetUuid: string): Promise<void> {
+  if (!targetUuid || sendingApplyTarget.value) {
+    return
+  }
+  if (!userUuid.value) {
+    searchError.value = '登录状态无效，请重新登录。'
+    return
+  }
+  if (targetUuid === userUuid.value) {
+    searchError.value = '不能添加自己为好友。'
+    return
+  }
+  if (isExistingFriend(targetUuid)) {
+    searchError.value = '对方已经是你的好友。'
+    return
+  }
+  if (isPeerInBlacklist(targetUuid)) {
+    searchError.value = '对方在黑名单中，请先移出后再申请。'
+    return
+  }
+
+  clearSearchFeedback()
+  sendingApplyTarget.value = targetUuid
+  try {
+    await sendFriendApply({
+      targetUuid,
+      reason: searchReasonDraft.value.trim() || undefined,
+      source: 'desktop_search'
+    })
+    const target =
+      searchResults.value.find((item) => item.uuid === targetUuid)?.nickname || targetUuid
+    searchMessage.value = `好友申请已发送给 ${target}。`
+  } catch (error) {
+    searchError.value = resolveRelationErrorMessage('send_friend_apply', error)
+  } finally {
+    sendingApplyTarget.value = ''
+  }
+}
+
+async function handleSaveFriendRemark(): Promise<void> {
+  if (!userUuid.value || !selectedFriendRow.value || contactActionPending.value) {
+    return
+  }
+
+  const remark = contactRemarkDraft.value.trim()
+  if (!contactRemarkChanged.value) {
+    return
+  }
+
+  contactActionPending.value = true
+  contactActionError.value = ''
+  try {
+    await friendStore.updateFriendRemark(userUuid.value, selectedFriendRow.value.peerUuid, remark)
+  } catch (error) {
+    contactActionError.value = resolveRelationErrorMessage('set_friend_remark', error)
+  } finally {
+    contactActionPending.value = false
+  }
+}
+
+async function handleSaveFriendTag(): Promise<void> {
+  if (!userUuid.value || !selectedFriendRow.value || contactActionPending.value) {
+    return
+  }
+
+  const groupTag = contactTagDraft.value.trim()
+  if (!contactTagChanged.value) {
+    return
+  }
+
+  contactActionPending.value = true
+  contactActionError.value = ''
+  try {
+    await friendStore.updateFriendTag(userUuid.value, selectedFriendRow.value.peerUuid, groupTag)
+  } catch (error) {
+    contactActionError.value = resolveRelationErrorMessage('set_friend_tag', error)
+  } finally {
+    contactActionPending.value = false
+  }
+}
+
 async function handleRemoveBlacklist(): Promise<void> {
   if (!userUuid.value || !selectedBlacklistRow.value || blacklistActionPending.value) {
     return
@@ -622,6 +806,12 @@ async function resetAndNavigateLogin(): Promise<void> {
   deviceStore.reset()
   contactActionError.value = ''
   blacklistActionError.value = ''
+  contactRemarkDraft.value = ''
+  contactTagDraft.value = ''
+  searchKeyword.value = ''
+  searchReasonDraft.value = '我是 LCchat 用户'
+  searchResults.value = []
+  clearSearchFeedback()
   stopCodeCooldown()
   codeCooldownSeconds.value = 0
   clearSecurityFeedback()
@@ -749,23 +939,69 @@ onBeforeUnmount(() => {
         empty-text="请选择一位好友查看详情"
       >
         <template #actions>
-          <div v-if="selectedFriendRow" class="contact-actions">
-            <button
-              type="button"
-              class="action-btn action-btn--danger"
-              :disabled="contactActionPending"
-              @click="handleDeleteFriend"
-            >
-              删除好友
-            </button>
-            <button
-              type="button"
-              class="action-btn action-btn--ghost"
-              :disabled="contactActionPending"
-              @click="handleAddBlacklist"
-            >
-              加入黑名单
-            </button>
+          <div v-if="selectedFriendRow" class="contact-actions-wrap">
+            <div class="contact-actions">
+              <button
+                type="button"
+                class="action-btn action-btn--danger"
+                :disabled="contactActionPending"
+                @click="handleDeleteFriend"
+              >
+                删除好友
+              </button>
+              <button
+                type="button"
+                class="action-btn action-btn--ghost"
+                :disabled="contactActionPending"
+                @click="handleAddBlacklist"
+              >
+                加入黑名单
+              </button>
+            </div>
+
+            <section class="contact-edit-card">
+              <label class="contact-field">
+                <span>好友备注</span>
+                <input
+                  v-model="contactRemarkDraft"
+                  maxlength="64"
+                  placeholder="输入好友备注"
+                  @input="handleContactInput"
+                />
+              </label>
+              <button
+                type="button"
+                class="action-btn action-btn--primary"
+                :disabled="!contactRemarkChanged || contactActionPending"
+                @click="handleSaveFriendRemark"
+              >
+                保存备注
+              </button>
+            </section>
+
+            <section class="contact-edit-card">
+              <label class="contact-field">
+                <span>好友标签</span>
+                <input
+                  v-model="contactTagDraft"
+                  list="friend-tag-options"
+                  maxlength="32"
+                  placeholder="例如：工作 / 家人 / 同学"
+                  @input="handleContactInput"
+                />
+                <datalist id="friend-tag-options">
+                  <option v-for="name in tagSuggestionNames" :key="name" :value="name" />
+                </datalist>
+              </label>
+              <button
+                type="button"
+                class="action-btn action-btn--primary"
+                :disabled="!contactTagChanged || contactActionPending"
+                @click="handleSaveFriendTag"
+              >
+                保存标签
+              </button>
+            </section>
           </div>
           <p v-if="contactActionError" class="apply-error">{{ contactActionError }}</p>
         </template>
@@ -815,6 +1051,71 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <p v-if="applyActionError" class="apply-error">{{ applyActionError }}</p>
+
+          <section class="search-user-card">
+            <header class="search-user-header">
+              <h3>搜索用户</h3>
+              <p>输入关键词搜索并发送好友申请。</p>
+            </header>
+
+            <div class="search-user-form">
+              <input
+                v-model.trim="searchKeyword"
+                placeholder="昵称 / UUID / 邮箱关键词"
+                maxlength="20"
+                @input="handleSearchInput"
+              />
+              <button
+                type="button"
+                class="action-btn action-btn--primary"
+                :disabled="searchingUsers || !searchKeyword.trim()"
+                @click="handleSearchUsers"
+              >
+                {{ searchingUsers ? '搜索中...' : '搜索' }}
+              </button>
+            </div>
+
+            <label class="search-reason-field">
+              <span>申请附言</span>
+              <input
+                v-model="searchReasonDraft"
+                maxlength="100"
+                placeholder="例如：一起交流技术"
+                @input="handleSearchInput"
+              />
+            </label>
+
+            <ul v-if="searchResults.length > 0" class="search-result-list">
+              <li v-for="item in searchResults" :key="item.uuid" class="search-result-item">
+                <div class="search-result-meta">
+                  <strong>{{ item.nickname || item.uuid }}</strong>
+                  <p>{{ item.signature || item.uuid }}</p>
+                </div>
+                <button
+                  type="button"
+                  class="action-btn action-btn--ghost"
+                  :disabled="
+                    sendingApplyTarget === item.uuid ||
+                    item.isFriend ||
+                    isExistingFriend(item.uuid) ||
+                    isPeerInBlacklist(item.uuid)
+                  "
+                  @click="handleSendFriendApply(item.uuid)"
+                >
+                  <template v-if="sendingApplyTarget === item.uuid">发送中...</template>
+                  <template v-else-if="item.isFriend || isExistingFriend(item.uuid)"
+                    >已是好友</template
+                  >
+                  <template v-else-if="isPeerInBlacklist(item.uuid)">黑名单中</template>
+                  <template v-else>加好友</template>
+                </button>
+              </li>
+            </ul>
+            <p v-else class="device-empty">暂无搜索结果</p>
+
+            <p v-if="searchMessage" class="search-message">{{ searchMessage }}</p>
+            <p v-if="searchError" class="apply-error">{{ searchError }}</p>
+          </section>
         </template>
       </DetailPane>
     </template>
@@ -971,6 +1272,44 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
+.contact-actions-wrap {
+  display: grid;
+  gap: 10px;
+}
+
+.contact-edit-card {
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  padding: 10px;
+  background: #fff;
+  display: grid;
+  gap: 8px;
+}
+
+.contact-field {
+  display: grid;
+  gap: 6px;
+}
+
+.contact-field span {
+  font-size: 12px;
+  color: var(--c-text-sub);
+}
+
+.contact-field input {
+  width: 100%;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--c-text-main);
+  outline: none;
+}
+
+.contact-field input:focus {
+  border-color: var(--c-primary);
+}
+
 .action-btn {
   border: 1px solid transparent;
   border-radius: 8px;
@@ -1016,6 +1355,98 @@ onBeforeUnmount(() => {
 .apply-error {
   margin: 8px 0 0;
   color: var(--c-danger);
+  font-size: 12px;
+}
+
+.search-user-card {
+  margin-top: 12px;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+  box-shadow: var(--shadow-1);
+}
+
+.search-user-header h3 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--c-text-main);
+}
+
+.search-user-header p {
+  margin: 6px 0 0;
+  color: var(--c-text-muted);
+  font-size: 12px;
+}
+
+.search-user-form {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.search-user-form input,
+.search-reason-field input {
+  width: 100%;
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--c-text-main);
+  outline: none;
+}
+
+.search-user-form input:focus,
+.search-reason-field input:focus {
+  border-color: var(--c-primary);
+}
+
+.search-reason-field {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.search-reason-field span {
+  font-size: 12px;
+  color: var(--c-text-sub);
+}
+
+.search-result-list {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.search-result-item {
+  border: 1px solid var(--c-border);
+  border-radius: 10px;
+  background: #fafbfc;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.search-result-meta strong {
+  display: block;
+  color: var(--c-text-main);
+  font-size: 13px;
+}
+
+.search-result-meta p {
+  margin: 4px 0 0;
+  color: var(--c-text-sub);
+  font-size: 12px;
+}
+
+.search-message {
+  margin: 8px 0 0;
+  color: var(--c-primary);
   font-size: 12px;
 }
 

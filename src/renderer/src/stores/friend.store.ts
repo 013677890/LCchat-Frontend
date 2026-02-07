@@ -4,10 +4,17 @@ import type { FriendChangeRow, FriendRow, JsonObject } from '../../../shared/typ
 import {
   deleteFriend,
   fetchFriendList,
+  setFriendRemark,
+  setFriendTag,
   syncFriendList,
   type SyncFriendChangeDTO
 } from '../modules/contact/api'
 import type { FriendDTO } from '../shared/types/friend'
+
+interface FriendTagSuggestion {
+  tagName: string
+  count: number
+}
 
 function buildFriendPayload(item: FriendDTO): JsonObject {
   return {
@@ -60,12 +67,30 @@ function getLocalVersion(items: FriendRow[]): number {
   return items.reduce((maxVersion, item) => Math.max(maxVersion, item.version || 0), 0)
 }
 
+function buildTagSuggestions(rows: FriendRow[]): FriendTagSuggestion[] {
+  const counter = new Map<string, number>()
+
+  for (const row of rows) {
+    const groupTag = typeof row.payload.groupTag === 'string' ? row.payload.groupTag.trim() : ''
+    if (!groupTag) {
+      continue
+    }
+    counter.set(groupTag, (counter.get(groupTag) ?? 0) + 1)
+  }
+
+  return [...counter.entries()]
+    .map(([tagName, count]) => ({ tagName, count }))
+    .sort((a, b) => b.count - a.count || a.tagName.localeCompare(b.tagName, 'zh-CN'))
+}
+
 export const useFriendStore = defineStore('friend', () => {
   const friends = shallowRef<FriendRow[]>([])
+  const tagSuggestions = shallowRef<FriendTagSuggestion[]>([])
   const version = ref(0)
 
   function reset(): void {
     friends.value = []
+    tagSuggestions.value = []
     version.value = 0
   }
 
@@ -77,10 +102,12 @@ export const useFriendStore = defineStore('friend', () => {
 
     try {
       friends.value = await window.api.localdb.friends.getList(userUuid)
+      tagSuggestions.value = buildTagSuggestions(friends.value)
       version.value = getLocalVersion(friends.value)
     } catch (error) {
       console.warn('load friends from localdb failed', error)
       friends.value = []
+      tagSuggestions.value = []
       version.value = 0
     }
   }
@@ -96,6 +123,7 @@ export const useFriendStore = defineStore('friend', () => {
       console.warn('replace friends in localdb failed', error)
     }
     friends.value = [...items]
+    tagSuggestions.value = buildTagSuggestions(items)
     version.value = latestVersion
   }
 
@@ -195,14 +223,95 @@ export const useFriendStore = defineStore('friend', () => {
     await syncFromServer(userUuid)
   }
 
+  async function updateFriendRemark(
+    userUuid: string,
+    peerUuid: string,
+    remark: string
+  ): Promise<void> {
+    if (!userUuid || !peerUuid) {
+      return
+    }
+
+    await setFriendRemark({
+      userUuid: peerUuid,
+      remark
+    })
+
+    const current = friends.value.find((item) => item.peerUuid === peerUuid)
+    if (!current) {
+      await syncFromServer(userUuid)
+      return
+    }
+
+    await applyChanges(
+      userUuid,
+      [
+        {
+          action: 'upsert',
+          peerUuid,
+          payload: {
+            ...current.payload,
+            remark
+          },
+          version: current.version,
+          updatedAt: Date.now()
+        }
+      ],
+      version.value
+    )
+    await syncFromServer(userUuid)
+  }
+
+  async function updateFriendTag(
+    userUuid: string,
+    peerUuid: string,
+    groupTag: string
+  ): Promise<void> {
+    if (!userUuid || !peerUuid) {
+      return
+    }
+
+    await setFriendTag({
+      userUuid: peerUuid,
+      groupTag
+    })
+
+    const current = friends.value.find((item) => item.peerUuid === peerUuid)
+    if (!current) {
+      await syncFromServer(userUuid)
+      return
+    }
+
+    await applyChanges(
+      userUuid,
+      [
+        {
+          action: 'upsert',
+          peerUuid,
+          payload: {
+            ...current.payload,
+            groupTag
+          },
+          version: current.version,
+          updatedAt: Date.now()
+        }
+      ],
+      version.value
+    )
+    await syncFromServer(userUuid)
+  }
+
   return {
     friends,
+    tagSuggestions,
     version,
     reset,
     loadFriends,
     replaceAll,
     applyChanges,
     syncFromServer,
-    removeFriend
+    removeFriend,
+    updateFriendRemark,
+    updateFriendTag
   }
 })
