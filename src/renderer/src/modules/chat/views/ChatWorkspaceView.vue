@@ -7,10 +7,12 @@ import MessagePane from '../components/MessagePane.vue'
 import SidebarNav from '../components/SidebarNav.vue'
 import DetailPane from '../../contact/components/DetailPane.vue'
 import ListPane from '../../contact/components/ListPane.vue'
+import ScannedUserProfileCard from '../../discover/components/ScannedUserProfileCard.vue'
 import UserSearchCard from '../../discover/components/UserSearchCard.vue'
 import SentApplyListCard from '../../discover/components/SentApplyListCard.vue'
 import SettingsActionsPanel from '../../settings/components/SettingsActionsPanel.vue'
 import {
+  fetchOtherProfile,
   fetchRelationStatus,
   searchUsers,
   sendFriendApply,
@@ -112,6 +114,11 @@ const searchingUsers = ref(false)
 const sendingApplyTarget = ref('')
 const searchError = ref('')
 const searchMessage = ref('')
+const scannedProfile = ref<SearchResultItem | null>(null)
+const scannedProfileLoading = ref(false)
+const scannedProfileBlocked = ref(false)
+const scannedProfileError = ref('')
+const scannedProfileMessage = ref('')
 const retryingSentApplyId = ref(0)
 const sentApplyError = ref('')
 const sentApplyMessage = ref('')
@@ -622,6 +629,34 @@ function clearSearchFeedback(): void {
   searchMessage.value = ''
 }
 
+function clearScannedProfileFeedback(): void {
+  scannedProfileError.value = ''
+  scannedProfileMessage.value = ''
+}
+
+function clearScannedProfile(): void {
+  scannedProfile.value = null
+  scannedProfileBlocked.value = false
+  scannedProfileLoading.value = false
+  clearScannedProfileFeedback()
+}
+
+function setDiscoverError(source: 'desktop_search' | 'desktop_qrcode', message: string): void {
+  if (source === 'desktop_qrcode') {
+    scannedProfileError.value = message
+    return
+  }
+  searchError.value = message
+}
+
+function setDiscoverMessage(source: 'desktop_search' | 'desktop_qrcode', message: string): void {
+  if (source === 'desktop_qrcode') {
+    scannedProfileMessage.value = message
+    return
+  }
+  searchMessage.value = message
+}
+
 function clearSentApplyFeedback(): void {
   sentApplyError.value = ''
   sentApplyMessage.value = ''
@@ -629,6 +664,10 @@ function clearSentApplyFeedback(): void {
 
 function handleSearchInput(): void {
   clearSearchFeedback()
+}
+
+function handleScannedProfileInput(): void {
+  clearScannedProfileFeedback()
 }
 
 async function handleDraftChange(value: string): Promise<void> {
@@ -756,6 +795,61 @@ async function handleSearchUsers(): Promise<void> {
   }
 }
 
+async function handleLoadScannedProfile(targetUuid: string): Promise<void> {
+  const normalizedTarget = targetUuid.trim()
+  if (!normalizedTarget || scannedProfileLoading.value) {
+    return
+  }
+
+  scannedProfile.value = null
+  scannedProfileLoading.value = true
+  scannedProfileBlocked.value = false
+  clearScannedProfileFeedback()
+
+  try {
+    const profileResponse = await fetchOtherProfile(normalizedTarget)
+    const userInfo = profileResponse.data.userInfo
+    if (!userInfo?.uuid) {
+      throw new Error('未找到该用户')
+    }
+
+    let isFriend = Boolean(profileResponse.data.isFriend)
+    if (userUuid.value) {
+      try {
+        const relationResponse = await fetchRelationStatus({
+          userUuid: userUuid.value,
+          peerUuid: userInfo.uuid
+        })
+        const relation = relationResponse.data.relation
+        isFriend = isFriend || relationResponse.data.isFriend || relation === 'friend'
+        scannedProfileBlocked.value =
+          Boolean(relationResponse.data.isBlacklist) || relation === 'blacklist'
+      } catch (error) {
+        console.warn('fetch relation status for scanned profile failed', error)
+      }
+    }
+
+    await presenceStore.syncSingle(userInfo.uuid)
+    const presenceState = getPresenceState(userInfo.uuid)
+    scannedProfile.value = {
+      uuid: userInfo.uuid,
+      nickname: userInfo.nickname || userInfo.uuid,
+      avatar: userInfo.avatar || '',
+      signature: userInfo.signature || '',
+      isFriend,
+      isOnline: presenceState.isOnline,
+      lastSeenAt: presenceState.lastSeenAt,
+      presenceText: formatPresenceStatusText(presenceState)
+    }
+  } catch (error) {
+    scannedProfile.value = null
+    scannedProfileBlocked.value = false
+    scannedProfileError.value = normalizeErrorMessage(error)
+  } finally {
+    scannedProfileLoading.value = false
+  }
+}
+
 async function handleQRCodeResolved(targetUuid: string): Promise<void> {
   const normalizedTarget = targetUuid.trim()
   if (!normalizedTarget) {
@@ -764,11 +858,13 @@ async function handleQRCodeResolved(targetUuid: string): Promise<void> {
 
   appStore.setActiveNav('discover')
   searchKeyword.value = normalizedTarget
-  clearSearchFeedback()
-  await handleSearchUsers()
+  await handleLoadScannedProfile(normalizedTarget)
 }
 
-async function ensureRemoteRelationAllowed(targetUuid: string): Promise<boolean> {
+async function ensureRemoteRelationAllowed(
+  targetUuid: string,
+  source: 'desktop_search' | 'desktop_qrcode'
+): Promise<boolean> {
   if (!userUuid.value) {
     return false
   }
@@ -781,11 +877,11 @@ async function ensureRemoteRelationAllowed(targetUuid: string): Promise<boolean>
 
     const relation = response.data.relation
     if (response.data.isFriend || relation === 'friend') {
-      searchError.value = '对方已经是你的好友。'
+      setDiscoverError(source, '对方已经是你的好友。')
       return false
     }
     if (response.data.isBlacklist || relation === 'blacklist') {
-      searchError.value = '你已将对方拉黑，请先移出黑名单后再申请。'
+      setDiscoverError(source, '你已将对方拉黑，请先移出黑名单后再申请。')
       return false
     }
   } catch (error) {
@@ -795,29 +891,39 @@ async function ensureRemoteRelationAllowed(targetUuid: string): Promise<boolean>
   return true
 }
 
-async function handleSendFriendApply(targetUuid: string): Promise<void> {
+async function handleSendFriendApply(
+  targetUuid: string,
+  source: 'desktop_search' | 'desktop_qrcode' = 'desktop_search'
+): Promise<void> {
   if (!targetUuid || sendingApplyTarget.value) {
     return
   }
   if (!userUuid.value) {
-    searchError.value = '登录状态无效，请重新登录。'
+    setDiscoverError(source, '登录状态无效，请重新登录。')
     return
   }
   if (targetUuid === userUuid.value) {
-    searchError.value = '不能添加自己为好友。'
+    setDiscoverError(source, '不能添加自己为好友。')
     return
   }
   if (isExistingFriend(targetUuid)) {
-    searchError.value = '对方已经是你的好友。'
+    setDiscoverError(source, '对方已经是你的好友。')
     return
   }
-  if (isPeerInBlacklist(targetUuid)) {
-    searchError.value = '对方在黑名单中，请先移出后再申请。'
+  if (
+    isPeerInBlacklist(targetUuid) ||
+    (source === 'desktop_qrcode' && scannedProfileBlocked.value)
+  ) {
+    setDiscoverError(source, '对方在黑名单中，请先移出后再申请。')
     return
   }
 
-  clearSearchFeedback()
-  const relationAllowed = await ensureRemoteRelationAllowed(targetUuid)
+  if (source === 'desktop_qrcode') {
+    clearScannedProfileFeedback()
+  } else {
+    clearSearchFeedback()
+  }
+  const relationAllowed = await ensureRemoteRelationAllowed(targetUuid, source)
   if (!relationAllowed) {
     return
   }
@@ -827,14 +933,20 @@ async function handleSendFriendApply(targetUuid: string): Promise<void> {
     await sendFriendApply({
       targetUuid,
       reason: searchReasonDraft.value.trim() || undefined,
-      source: 'desktop_search'
+      source
     })
     const target =
       searchResultItems.value.find((item) => item.uuid === targetUuid)?.nickname || targetUuid
-    searchMessage.value = `好友申请已发送给 ${target}。`
+    setDiscoverMessage(source, `好友申请已发送给 ${target}。`)
+    if (source === 'desktop_qrcode' && scannedProfile.value?.uuid === targetUuid) {
+      scannedProfile.value = {
+        ...scannedProfile.value,
+        isFriend: true
+      }
+    }
     await applyStore.syncSentFromServer(userUuid.value)
   } catch (error) {
-    searchError.value = resolveRelationErrorMessage('send_friend_apply', error)
+    setDiscoverError(source, resolveRelationErrorMessage('send_friend_apply', error))
   } finally {
     sendingApplyTarget.value = ''
   }
@@ -916,6 +1028,7 @@ async function resetAndNavigateLogin(): Promise<void> {
   searchReasonDraft.value = '我是 LCchat 用户'
   searchResults.value = []
   clearSearchFeedback()
+  clearScannedProfile()
   clearSentApplyFeedback()
   retryingSentApplyId.value = 0
   resetSettingsState()
@@ -1115,6 +1228,26 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <p v-if="applyActionError" class="apply-error">{{ applyActionError }}</p>
+          <ScannedUserProfileCard
+            v-if="
+              scannedProfile ||
+              scannedProfileLoading ||
+              scannedProfileError ||
+              scannedProfileMessage
+            "
+            :profile="scannedProfile"
+            :loading="scannedProfileLoading"
+            :sending="sendingApplyTarget === scannedProfile?.uuid"
+            :relation-blocked="scannedProfileBlocked"
+            :reason-preview="searchReasonDraft"
+            :existing-friend-ids="existingFriendIds"
+            :blacklist-ids="blacklistPeerIds"
+            :message="scannedProfileMessage"
+            :error-message="scannedProfileError"
+            @clear-feedback="handleScannedProfileInput"
+            @send-apply="handleSendFriendApply($event, 'desktop_qrcode')"
+            @close="clearScannedProfile"
+          />
           <UserSearchCard
             :keyword="searchKeyword"
             :reason="searchReasonDraft"

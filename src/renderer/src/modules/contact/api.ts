@@ -1,6 +1,7 @@
 import { httpClient } from '../../shared/http/client'
 import type { ApiResponse } from '../../shared/types/api'
 import type { FriendDTO, PaginationDTO } from '../../shared/types/friend'
+import type { UserProfileDTO } from '../../shared/types/user'
 
 export interface GetFriendListResponseData {
   items: FriendDTO[]
@@ -152,6 +153,11 @@ export interface SearchUserResponseData {
   pagination: PaginationDTO | null
 }
 
+export interface GetOtherProfileResponseData {
+  userInfo: UserProfileDTO | null
+  isFriend: boolean
+}
+
 export interface SendFriendApplyRequest {
   targetUuid: string
   reason?: string
@@ -274,6 +280,15 @@ export async function searchUsers(
     {
       params
     }
+  )
+  return response.data
+}
+
+export async function fetchOtherProfile(
+  userUuid: string
+): Promise<ApiResponse<GetOtherProfileResponseData>> {
+  const response = await httpClient.get<ApiResponse<GetOtherProfileResponseData>>(
+    `/api/v1/auth/user/profile/${encodeURIComponent(userUuid)}`
   )
   return response.data
 }
