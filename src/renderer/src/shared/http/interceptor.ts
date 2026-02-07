@@ -22,7 +22,9 @@ function createBusinessError(code: number, message: string, traceId: string): Ap
   return error
 }
 
-async function attachHeaders(config: InternalAxiosRequestConfig): Promise<InternalAxiosRequestConfig> {
+async function attachHeaders(
+  config: InternalAxiosRequestConfig
+): Promise<InternalAxiosRequestConfig> {
   const nextConfig = config
   const deviceId = await getDeviceId()
   const headers = nextConfig.headers as Record<string, string>
@@ -44,7 +46,11 @@ function unwrapBusinessCode(response: AxiosResponse): AxiosResponse {
   }
 
   if (payload.code !== 0) {
-    const error = createBusinessError(payload.code, payload.message ?? '业务请求失败', payload.trace_id ?? '')
+    const error = createBusinessError(
+      payload.code,
+      payload.message ?? '业务请求失败',
+      payload.trace_id ?? ''
+    )
     error.config = response.config
     throw error
   }

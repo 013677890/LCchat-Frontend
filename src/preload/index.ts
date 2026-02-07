@@ -26,7 +26,8 @@ const api: BridgeApi = {
     init: () => ipcRenderer.invoke(IPC_CHANNELS.localdb.init),
     profile: {
       get: (userUuid: string) => ipcRenderer.invoke(IPC_CHANNELS.localdb.profile.get, userUuid),
-      upsert: (profile: ProfileRow) => ipcRenderer.invoke(IPC_CHANNELS.localdb.profile.upsert, profile)
+      upsert: (profile: ProfileRow) =>
+        ipcRenderer.invoke(IPC_CHANNELS.localdb.profile.upsert, profile)
     },
     friends: {
       getList: (userUuid: string) =>
@@ -52,7 +53,8 @@ const api: BridgeApi = {
         ipcRenderer.invoke(IPC_CHANNELS.localdb.applies.upsertSent, userUuid, items)
     },
     blacklist: {
-      getList: (userUuid: string) => ipcRenderer.invoke(IPC_CHANNELS.localdb.blacklist.getList, userUuid),
+      getList: (userUuid: string) =>
+        ipcRenderer.invoke(IPC_CHANNELS.localdb.blacklist.getList, userUuid),
       replaceAll: (userUuid: string, items: BlacklistRow[]) =>
         ipcRenderer.invoke(IPC_CHANNELS.localdb.blacklist.replaceAll, userUuid, items)
     },

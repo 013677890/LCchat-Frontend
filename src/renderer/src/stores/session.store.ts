@@ -110,8 +110,8 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  const activeConversation = computed(() =>
-    conversations.value.find((item) => item.convId === activeConvId.value) ?? null
+  const activeConversation = computed(
+    () => conversations.value.find((item) => item.convId === activeConvId.value) ?? null
   )
 
   const activeMessages = computed(() => {
@@ -137,7 +137,9 @@ export const useSessionStore = defineStore('session', () => {
     )
     if (cachedConversations.length === 0) {
       cachedConversations = createSeedConversations(userUuid)
-      await safeWrite(() => window.api.localdb.chat.upsertConversations(userUuid, cachedConversations))
+      await safeWrite(() =>
+        window.api.localdb.chat.upsertConversations(userUuid, cachedConversations)
+      )
     }
 
     conversations.value = [...cachedConversations].sort((a, b) => b.updatedAt - a.updatedAt)
@@ -233,7 +235,9 @@ export const useSessionStore = defineStore('session', () => {
 
     const sortedConversations = [...nextConversations].sort((a, b) => b.updatedAt - a.updatedAt)
     conversations.value = sortedConversations
-    await safeWrite(() => window.api.localdb.chat.upsertConversations(userUuid, sortedConversations))
+    await safeWrite(() =>
+      window.api.localdb.chat.upsertConversations(userUuid, sortedConversations)
+    )
     await setDraft('')
   }
 

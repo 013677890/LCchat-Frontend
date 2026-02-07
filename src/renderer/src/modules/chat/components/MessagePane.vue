@@ -29,7 +29,10 @@ function getFrom(message: MessageRow): 'self' | 'peer' {
 }
 
 function getTime(message: MessageRow): string {
-  return new Date(message.sendTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  return new Date(message.sendTime).toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
 }
 
 function handleSend(): void {
@@ -66,11 +69,7 @@ function handleSend(): void {
     </main>
 
     <footer class="composer">
-      <textarea
-        v-model="draftProxy"
-        placeholder="输入消息，Enter 换行，点击发送提交"
-        rows="4"
-      />
+      <textarea v-model="draftProxy" placeholder="输入消息，Enter 换行，点击发送提交" rows="4" />
       <div class="composer-actions">
         <span>草稿自动写入本地 SQLite</span>
         <button type="button" @click="handleSend">发送</button>

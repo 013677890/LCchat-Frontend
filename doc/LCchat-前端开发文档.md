@@ -686,3 +686,59 @@ interface ApiResponse<T> {
 2. `MarkApplyAsRead` 是否支持空数组=全部已读。
 3. 消息服务（msg/connect）接口发布时间。
 4. 是否引入 `keytar` 作为系统级凭据存储。
+
+---
+
+## 17. 后端联调清单（第 1 轮）
+
+- 联调日期: `2026-02-07`
+- 联调目标: 覆盖高风险失败路径，确保桌面端在异常场景下可恢复、可提示、不中断主流程。
+
+### 17.1 鉴权失败（401 / token 失效）
+
+1. 触发接口:
+   - `POST /api/v1/public/user/login`
+   - `GET /api/v1/auth/user/profile`
+   - `GET /api/v1/auth/friend/list`
+2. 核验点:
+   - 前端展示明确错误文案，不写入错误会话。
+   - 已登录态遇到 `401` 时触发刷新流程，刷新失败则清 session 并回登录页。
+   - `trace_id` 能透传到错误日志中，便于后端排查。
+3. 单测覆盖:
+   - `src/renderer/src/stores/auth.store.spec.ts`（登录鉴权失败）
+
+### 17.2 接口超时（网络抖动 / 网关慢响应）
+
+1. 触发接口:
+   - `POST /api/v1/public/user/login`
+   - `POST /api/v1/auth/friend/sync`
+2. 核验点:
+   - 请求超时后页面可继续交互，不出现白屏或死锁。
+   - store 状态保持可回退（不污染当前本地缓存状态）。
+   - 用户可重试，并看到确定性的错误反馈。
+3. 单测覆盖:
+   - `src/renderer/src/stores/auth.store.spec.ts`（登录超时）
+
+### 17.3 空列表（新账号/空数据）
+
+1. 触发接口:
+   - `GET /api/v1/auth/friend/list` 返回 `items=[]`
+   - `POST /api/v1/auth/friend/sync` 返回 `changes=[]`
+2. 核验点:
+   - 本地缓存替换逻辑正确执行，不残留脏数据。
+   - 页面稳定展示“空态”，不会误显示历史数据。
+   - `version` 与服务端返回对齐。
+3. 单测覆盖:
+   - `src/renderer/src/stores/friend.store.spec.ts`（空列表同步）
+
+### 17.4 分页边界（过大页数 / hasMore 持续为 true）
+
+1. 触发接口:
+   - `GET /api/v1/auth/friend/list` 返回超大 `totalPages`
+   - `POST /api/v1/auth/friend/sync` 连续返回 `hasMore=true`
+2. 核验点:
+   - 全量拉取严格受 `page <= 50` 限制。
+   - 增量同步严格受 `rounds < 20` 限制。
+   - 到达边界后自动停止，避免无限请求。
+3. 单测覆盖:
+   - `src/renderer/src/stores/friend.store.spec.ts`（分页边界停止策略）

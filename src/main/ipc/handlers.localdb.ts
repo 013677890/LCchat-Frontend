@@ -230,7 +230,7 @@ export function registerLocalDBHandlers(ipcMain: IpcMain): void {
       status: row.status,
       payload: parsePayload(row.payload_json),
       updatedAt: row.updated_at
-      }))
+    }))
   })
 
   bind(
@@ -536,21 +536,25 @@ export function registerLocalDBHandlers(ipcMain: IpcMain): void {
     }
   )
 
-  bind(ipcMain, IPC_CHANNELS.localdb.chat.saveDraft, (userUuid: string, convId: string, draft: string) => {
-    const db = getLocalDB()
-    db.prepare(
-      `INSERT INTO message_drafts(user_uuid, conv_id, draft_text, updated_at)
+  bind(
+    ipcMain,
+    IPC_CHANNELS.localdb.chat.saveDraft,
+    (userUuid: string, convId: string, draft: string) => {
+      const db = getLocalDB()
+      db.prepare(
+        `INSERT INTO message_drafts(user_uuid, conv_id, draft_text, updated_at)
        VALUES(@user_uuid, @conv_id, @draft_text, @updated_at)
        ON CONFLICT(user_uuid, conv_id) DO UPDATE SET
          draft_text = excluded.draft_text,
          updated_at = excluded.updated_at`
-    ).run({
-      user_uuid: userUuid,
-      conv_id: convId,
-      draft_text: draft,
-      updated_at: now()
-    })
-  })
+      ).run({
+        user_uuid: userUuid,
+        conv_id: convId,
+        draft_text: draft,
+        updated_at: now()
+      })
+    }
+  )
 
   bind(ipcMain, IPC_CHANNELS.localdb.chat.getDraft, (userUuid: string, convId: string): string => {
     const db = getLocalDB()

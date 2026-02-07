@@ -6,6 +6,7 @@ interface SearchResultItem {
   isFriend: boolean
   isOnline: boolean | null
   lastSeenAt: string
+  presenceText: string
 }
 
 const props = defineProps<{
@@ -103,11 +104,7 @@ function handleSendApply(targetUuid: string): void {
               'presence--offline': item.isOnline === false
             }"
           >
-            <template v-if="item.isOnline === true">在线</template>
-            <template v-else-if="item.isOnline === false">
-              离线{{ item.lastSeenAt ? ` · ${item.lastSeenAt}` : '' }}
-            </template>
-            <template v-else>状态未知</template>
+            {{ item.presenceText }}
           </small>
         </div>
         <button

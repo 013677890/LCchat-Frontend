@@ -28,6 +28,7 @@ import { usePresenceStore } from '../../../stores/presence.store'
 import { useSessionStore } from '../../../stores/session.store'
 import { useUserStore } from '../../../stores/user.store'
 import { normalizeErrorMessage } from '../../../shared/utils/error'
+import { formatPresenceStatusText } from '../../../shared/utils/presence'
 import { formatConversationTime } from '../../../shared/utils/time'
 
 interface ConversationListItem {
@@ -54,6 +55,7 @@ interface SearchResultItem {
   isFriend: boolean
   isOnline: boolean | null
   lastSeenAt: string
+  presenceText: string
 }
 
 interface SentApplyListItem {
@@ -187,7 +189,8 @@ function mapSearchResult(item: SearchUserItemDTO): SearchResultItem {
     signature: item.signature || '',
     isFriend: Boolean(item.isFriend),
     isOnline: null,
-    lastSeenAt: ''
+    lastSeenAt: '',
+    presenceText: '状态未知'
   }
 }
 
@@ -207,14 +210,7 @@ function formatDateTime(timestamp: number): string {
 }
 
 function formatPresenceText(userUuid: string): string {
-  const state = getPresenceState(userUuid)
-  if (state.isOnline === true) {
-    return '在线'
-  }
-  if (state.isOnline === false) {
-    return state.lastSeenAt ? `离线 · ${state.lastSeenAt}` : '离线'
-  }
-  return '状态未知'
+  return formatPresenceStatusText(getPresenceState(userUuid))
 }
 
 const userLabel = computed(() => {
@@ -250,14 +246,7 @@ const friendPaneItems = computed<PaneItem[]>(() =>
   friends.value.map((row) => {
     const presenceState = getPresenceState(row.peerUuid)
     const signature = getString(row.payload, 'signature') || ''
-    const presenceText =
-      presenceState.isOnline === true
-        ? '在线'
-        : presenceState.isOnline === false
-          ? presenceState.lastSeenAt
-            ? `离线 · ${presenceState.lastSeenAt}`
-            : '离线'
-          : '状态未知'
+    const presenceText = formatPresenceStatusText(presenceState)
     return {
       id: row.peerUuid,
       title: getString(row.payload, 'remark') || getString(row.payload, 'nickname') || row.peerUuid,
@@ -295,7 +284,8 @@ const searchResultItems = computed<SearchResultItem[]>(() =>
     return {
       ...item,
       isOnline: presence.isOnline,
-      lastSeenAt: presence.lastSeenAt
+      lastSeenAt: presence.lastSeenAt,
+      presenceText: formatPresenceStatusText(presence)
     }
   })
 )
