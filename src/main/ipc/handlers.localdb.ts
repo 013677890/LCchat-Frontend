@@ -230,7 +230,7 @@ export function registerLocalDBHandlers(ipcMain: IpcMain): void {
       status: row.status,
       payload: parsePayload(row.payload_json),
       updatedAt: row.updated_at
-    }))
+      }))
   })
 
   bind(
@@ -261,6 +261,64 @@ export function registerLocalDBHandlers(ipcMain: IpcMain): void {
       })
 
       upsertInbox(items)
+    }
+  )
+
+  bind(ipcMain, IPC_CHANNELS.localdb.applies.getSent, (userUuid: string): FriendApplyRow[] => {
+    const db = getLocalDB()
+    const rows = db
+      .prepare(
+        `SELECT apply_id, direction, status, payload_json, updated_at
+         FROM friend_applies
+         WHERE user_uuid = ? AND direction = 'outbox'
+         ORDER BY updated_at DESC`
+      )
+      .all(userUuid) as Array<{
+      apply_id: number
+      direction: string
+      status: number
+      payload_json: string
+      updated_at: number
+    }>
+
+    return rows.map((row) => ({
+      userUuid,
+      applyId: row.apply_id,
+      direction: row.direction,
+      status: row.status,
+      payload: parsePayload(row.payload_json),
+      updatedAt: row.updated_at
+    }))
+  })
+
+  bind(
+    ipcMain,
+    IPC_CHANNELS.localdb.applies.upsertSent,
+    (userUuid: string, items: FriendApplyRow[]) => {
+      const db = getLocalDB()
+      const upsertSent = db.transaction((rows: FriendApplyRow[]) => {
+        const stmt = db.prepare(
+          `INSERT INTO friend_applies(user_uuid, apply_id, direction, status, payload_json, updated_at)
+           VALUES(@user_uuid, @apply_id, @direction, @status, @payload_json, @updated_at)
+           ON CONFLICT(user_uuid, apply_id, direction) DO UPDATE SET
+             status = excluded.status,
+             payload_json = excluded.payload_json,
+             updated_at = excluded.updated_at`
+        )
+
+        for (const item of rows) {
+          stmt.run({
+            user_uuid: userUuid,
+            apply_id: item.applyId,
+            direction: item.direction || 'outbox',
+            status: item.status,
+            payload_json: serializePayload(item.payload),
+            updated_at: item.updatedAt || now()
+          })
+        }
+      })
+
+      upsertSent(items)
     }
   )
 

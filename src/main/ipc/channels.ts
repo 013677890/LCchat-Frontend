@@ -20,7 +20,9 @@ export const IPC_CHANNELS = {
     },
     applies: {
       getInbox: 'localdb:applies:get-inbox',
-      upsertInbox: 'localdb:applies:upsert-inbox'
+      upsertInbox: 'localdb:applies:upsert-inbox',
+      getSent: 'localdb:applies:get-sent',
+      upsertSent: 'localdb:applies:upsert-sent'
     },
     blacklist: {
       getList: 'localdb:blacklist:get-list',

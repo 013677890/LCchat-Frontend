@@ -42,9 +42,14 @@ const api: BridgeApi = {
         )
     },
     applies: {
-      getInbox: (userUuid: string) => ipcRenderer.invoke(IPC_CHANNELS.localdb.applies.getInbox, userUuid),
+      getInbox: (userUuid: string) =>
+        ipcRenderer.invoke(IPC_CHANNELS.localdb.applies.getInbox, userUuid),
       upsertInbox: (userUuid: string, items: FriendApplyRow[]) =>
-        ipcRenderer.invoke(IPC_CHANNELS.localdb.applies.upsertInbox, userUuid, items)
+        ipcRenderer.invoke(IPC_CHANNELS.localdb.applies.upsertInbox, userUuid, items),
+      getSent: (userUuid: string) =>
+        ipcRenderer.invoke(IPC_CHANNELS.localdb.applies.getSent, userUuid),
+      upsertSent: (userUuid: string, items: FriendApplyRow[]) =>
+        ipcRenderer.invoke(IPC_CHANNELS.localdb.applies.upsertSent, userUuid, items)
     },
     blacklist: {
       getList: (userUuid: string) => ipcRenderer.invoke(IPC_CHANNELS.localdb.blacklist.getList, userUuid),

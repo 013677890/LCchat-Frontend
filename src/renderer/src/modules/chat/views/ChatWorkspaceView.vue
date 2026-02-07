@@ -7,10 +7,17 @@ import MessagePane from '../components/MessagePane.vue'
 import SidebarNav from '../components/SidebarNav.vue'
 import DetailPane from '../../contact/components/DetailPane.vue'
 import ListPane from '../../contact/components/ListPane.vue'
+import UserSearchCard from '../../discover/components/UserSearchCard.vue'
+import SentApplyListCard from '../../discover/components/SentApplyListCard.vue'
 import ProfileEditorCard from '../../profile/components/ProfileEditorCard.vue'
 import SecurityCenterCard from '../../security/components/SecurityCenterCard.vue'
 import { sendVerifyCode } from '../../auth/api'
-import { searchUsers, sendFriendApply, type SearchUserItemDTO } from '../../contact/api'
+import {
+  fetchRelationStatus,
+  searchUsers,
+  sendFriendApply,
+  type SearchUserItemDTO
+} from '../../contact/api'
 import { resolveRelationErrorMessage } from '../../contact/error-message'
 import { changeEmail, changePassword, deleteAccount } from '../../security/api'
 import { isSendTooFrequentError, resolveSecurityErrorMessage } from '../../security/error-message'
@@ -49,6 +56,15 @@ interface SearchResultItem {
   isFriend: boolean
 }
 
+interface SentApplyListItem {
+  applyId: number
+  targetUuid: string
+  targetNickname: string
+  reason: string
+  status: number
+  createdAt: number
+}
+
 interface ProfileEditorData {
   uuid: string
   email: string
@@ -85,6 +101,9 @@ const searchingUsers = ref(false)
 const sendingApplyTarget = ref('')
 const searchError = ref('')
 const searchMessage = ref('')
+const retryingSentApplyId = ref(0)
+const sentApplyError = ref('')
+const sentApplyMessage = ref('')
 const blacklistActionPending = ref(false)
 const blacklistActionError = ref('')
 const deviceActionPendingId = ref('')
@@ -106,7 +125,12 @@ const { profile } = storeToRefs(userStore)
 const { friends, tagSuggestions } = storeToRefs(friendStore)
 const { items: blacklistItems } = storeToRefs(blacklistStore)
 const { devices, loading: deviceLoading } = storeToRefs(deviceStore)
-const { inbox: applyInbox } = storeToRefs(applyStore)
+const {
+  inbox: applyInbox,
+  sent: sentApplies,
+  unreadCount: applyUnreadCount,
+  unreadCountSynced
+} = storeToRefs(applyStore)
 const {
   conversations,
   activeConvId,
@@ -190,8 +214,11 @@ const userLabel = computed(() => {
   return nickname || userUuid.value || '匿名用户'
 })
 
-const unreadApplyCount = computed(() =>
+const localUnreadApplyCount = computed(() =>
   applyInbox.value.reduce((count, row) => count + (getBoolean(row.payload, 'isRead') ? 0 : 1), 0)
+)
+const unreadApplyCount = computed(() =>
+  unreadCountSynced.value ? applyUnreadCount.value : localUnreadApplyCount.value
 )
 
 const activeConversationTitle = computed(() => {
@@ -236,6 +263,20 @@ const blacklistPaneItems = computed<PaneItem[]>(() =>
     title: getString(row.payload, 'nickname') || row.peerUuid,
     subtitle: row.peerUuid,
     meta: formatDateTime(getNumber(row.payload, 'blacklistedAt'))
+  }))
+)
+
+const existingFriendIds = computed(() => friends.value.map((item) => item.peerUuid))
+const blacklistPeerIds = computed(() => blacklistItems.value.map((item) => item.peerUuid))
+const sentApplyItems = computed<SentApplyListItem[]>(() =>
+  sentApplies.value.map((row) => ({
+    applyId: row.applyId,
+    targetUuid: getString(row.payload, 'targetUuid'),
+    targetNickname:
+      getString(row.payload, 'targetNickname') || getString(row.payload, 'targetUuid'),
+    reason: getString(row.payload, 'reason'),
+    status: row.status,
+    createdAt: getNumber(row.payload, 'createdAt')
   }))
 )
 
@@ -453,6 +494,11 @@ function clearSearchFeedback(): void {
   searchMessage.value = ''
 }
 
+function clearSentApplyFeedback(): void {
+  sentApplyError.value = ''
+  sentApplyMessage.value = ''
+}
+
 function handleSearchInput(): void {
   clearSearchFeedback()
 }
@@ -607,6 +653,33 @@ async function handleSearchUsers(): Promise<void> {
   }
 }
 
+async function ensureRemoteRelationAllowed(targetUuid: string): Promise<boolean> {
+  if (!userUuid.value) {
+    return false
+  }
+
+  try {
+    const response = await fetchRelationStatus({
+      userUuid: userUuid.value,
+      peerUuid: targetUuid
+    })
+
+    const relation = response.data.relation
+    if (response.data.isFriend || relation === 'friend') {
+      searchError.value = '对方已经是你的好友。'
+      return false
+    }
+    if (response.data.isBlacklist || relation === 'blacklist') {
+      searchError.value = '你已将对方拉黑，请先移出黑名单后再申请。'
+      return false
+    }
+  } catch (error) {
+    console.warn('check relation status before send apply failed, fallback to direct send', error)
+  }
+
+  return true
+}
+
 async function handleSendFriendApply(targetUuid: string): Promise<void> {
   if (!targetUuid || sendingApplyTarget.value) {
     return
@@ -629,6 +702,11 @@ async function handleSendFriendApply(targetUuid: string): Promise<void> {
   }
 
   clearSearchFeedback()
+  const relationAllowed = await ensureRemoteRelationAllowed(targetUuid)
+  if (!relationAllowed) {
+    return
+  }
+
   sendingApplyTarget.value = targetUuid
   try {
     await sendFriendApply({
@@ -639,10 +717,31 @@ async function handleSendFriendApply(targetUuid: string): Promise<void> {
     const target =
       searchResults.value.find((item) => item.uuid === targetUuid)?.nickname || targetUuid
     searchMessage.value = `好友申请已发送给 ${target}。`
+    await applyStore.syncSentFromServer(userUuid.value)
   } catch (error) {
     searchError.value = resolveRelationErrorMessage('send_friend_apply', error)
   } finally {
     sendingApplyTarget.value = ''
+  }
+}
+
+async function handleRetrySentApply(applyId: number): Promise<void> {
+  if (!userUuid.value || !applyId || retryingSentApplyId.value) {
+    return
+  }
+
+  clearSentApplyFeedback()
+  retryingSentApplyId.value = applyId
+  try {
+    const target =
+      sentApplyItems.value.find((item) => item.applyId === applyId)?.targetNickname || '目标用户'
+    await applyStore.retrySentApply(userUuid.value, applyId)
+    sentApplyMessage.value = `已重新发送申请给 ${target}。`
+    await applyStore.syncSentFromServer(userUuid.value)
+  } catch (error) {
+    sentApplyError.value = resolveRelationErrorMessage('send_friend_apply', error)
+  } finally {
+    retryingSentApplyId.value = 0
   }
 }
 
@@ -812,6 +911,8 @@ async function resetAndNavigateLogin(): Promise<void> {
   searchReasonDraft.value = '我是 LCchat 用户'
   searchResults.value = []
   clearSearchFeedback()
+  clearSentApplyFeedback()
+  retryingSentApplyId.value = 0
   stopCodeCooldown()
   codeCooldownSeconds.value = 0
   clearSecurityFeedback()
@@ -877,7 +978,8 @@ onMounted(async () => {
     sessionStore.bootstrap(authStore.userUuid),
     friendStore.loadFriends(authStore.userUuid),
     blacklistStore.load(authStore.userUuid),
-    applyStore.loadInbox(authStore.userUuid)
+    applyStore.loadInbox(authStore.userUuid),
+    applyStore.loadSent(authStore.userUuid)
   ])
 
   await Promise.all([
@@ -885,6 +987,8 @@ onMounted(async () => {
     friendStore.syncFromServer(authStore.userUuid),
     blacklistStore.syncFromServer(authStore.userUuid),
     applyStore.syncInboxFromServer(authStore.userUuid),
+    applyStore.syncSentFromServer(authStore.userUuid),
+    applyStore.syncUnreadCountFromServer(authStore.userUuid),
     deviceStore.loadDevices().catch((error) => {
       console.warn('sync devices from server failed, keep current state', error)
     })
@@ -1051,71 +1155,29 @@ onBeforeUnmount(() => {
             </button>
           </div>
           <p v-if="applyActionError" class="apply-error">{{ applyActionError }}</p>
-
-          <section class="search-user-card">
-            <header class="search-user-header">
-              <h3>搜索用户</h3>
-              <p>输入关键词搜索并发送好友申请。</p>
-            </header>
-
-            <div class="search-user-form">
-              <input
-                v-model.trim="searchKeyword"
-                placeholder="昵称 / UUID / 邮箱关键词"
-                maxlength="20"
-                @input="handleSearchInput"
-              />
-              <button
-                type="button"
-                class="action-btn action-btn--primary"
-                :disabled="searchingUsers || !searchKeyword.trim()"
-                @click="handleSearchUsers"
-              >
-                {{ searchingUsers ? '搜索中...' : '搜索' }}
-              </button>
-            </div>
-
-            <label class="search-reason-field">
-              <span>申请附言</span>
-              <input
-                v-model="searchReasonDraft"
-                maxlength="100"
-                placeholder="例如：一起交流技术"
-                @input="handleSearchInput"
-              />
-            </label>
-
-            <ul v-if="searchResults.length > 0" class="search-result-list">
-              <li v-for="item in searchResults" :key="item.uuid" class="search-result-item">
-                <div class="search-result-meta">
-                  <strong>{{ item.nickname || item.uuid }}</strong>
-                  <p>{{ item.signature || item.uuid }}</p>
-                </div>
-                <button
-                  type="button"
-                  class="action-btn action-btn--ghost"
-                  :disabled="
-                    sendingApplyTarget === item.uuid ||
-                    item.isFriend ||
-                    isExistingFriend(item.uuid) ||
-                    isPeerInBlacklist(item.uuid)
-                  "
-                  @click="handleSendFriendApply(item.uuid)"
-                >
-                  <template v-if="sendingApplyTarget === item.uuid">发送中...</template>
-                  <template v-else-if="item.isFriend || isExistingFriend(item.uuid)"
-                    >已是好友</template
-                  >
-                  <template v-else-if="isPeerInBlacklist(item.uuid)">黑名单中</template>
-                  <template v-else>加好友</template>
-                </button>
-              </li>
-            </ul>
-            <p v-else class="device-empty">暂无搜索结果</p>
-
-            <p v-if="searchMessage" class="search-message">{{ searchMessage }}</p>
-            <p v-if="searchError" class="apply-error">{{ searchError }}</p>
-          </section>
+          <UserSearchCard
+            :keyword="searchKeyword"
+            :reason="searchReasonDraft"
+            :results="searchResults"
+            :searching="searchingUsers"
+            :sending-target-uuid="sendingApplyTarget"
+            :existing-friend-ids="existingFriendIds"
+            :blacklist-ids="blacklistPeerIds"
+            :message="searchMessage"
+            :error-message="searchError"
+            @update:keyword="searchKeyword = $event"
+            @update:reason="searchReasonDraft = $event"
+            @search="handleSearchUsers"
+            @send-apply="handleSendFriendApply"
+            @clear-feedback="handleSearchInput"
+          />
+          <SentApplyListCard
+            :items="sentApplyItems"
+            :retrying-apply-id="retryingSentApplyId"
+            :message="sentApplyMessage"
+            :error-message="sentApplyError"
+            @retry="handleRetrySentApply"
+          />
         </template>
       </DetailPane>
     </template>
@@ -1355,98 +1417,6 @@ onBeforeUnmount(() => {
 .apply-error {
   margin: 8px 0 0;
   color: var(--c-danger);
-  font-size: 12px;
-}
-
-.search-user-card {
-  margin-top: 12px;
-  border: 1px solid var(--c-border);
-  border-radius: 12px;
-  background: #fff;
-  padding: 12px;
-  box-shadow: var(--shadow-1);
-}
-
-.search-user-header h3 {
-  margin: 0;
-  font-size: 14px;
-  color: var(--c-text-main);
-}
-
-.search-user-header p {
-  margin: 6px 0 0;
-  color: var(--c-text-muted);
-  font-size: 12px;
-}
-
-.search-user-form {
-  margin-top: 10px;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-}
-
-.search-user-form input,
-.search-reason-field input {
-  width: 100%;
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
-  padding: 7px 10px;
-  font-size: 13px;
-  color: var(--c-text-main);
-  outline: none;
-}
-
-.search-user-form input:focus,
-.search-reason-field input:focus {
-  border-color: var(--c-primary);
-}
-
-.search-reason-field {
-  margin-top: 8px;
-  display: grid;
-  gap: 6px;
-}
-
-.search-reason-field span {
-  font-size: 12px;
-  color: var(--c-text-sub);
-}
-
-.search-result-list {
-  margin: 10px 0 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  gap: 8px;
-}
-
-.search-result-item {
-  border: 1px solid var(--c-border);
-  border-radius: 10px;
-  background: #fafbfc;
-  padding: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.search-result-meta strong {
-  display: block;
-  color: var(--c-text-main);
-  font-size: 13px;
-}
-
-.search-result-meta p {
-  margin: 4px 0 0;
-  color: var(--c-text-sub);
-  font-size: 12px;
-}
-
-.search-message {
-  margin: 8px 0 0;
-  color: var(--c-primary);
   font-size: 12px;
 }
 

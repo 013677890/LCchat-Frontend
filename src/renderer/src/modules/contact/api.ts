@@ -47,7 +47,37 @@ export interface FriendApplyListResponseData {
   pagination: PaginationDTO | null
 }
 
+export interface SentApplyTargetInfoDTO {
+  uuid: string
+  nickname: string
+  avatar: string
+  gender: number
+  signature: string
+}
+
+export interface SentApplyItemDTO {
+  applyId: number
+  targetUuid: string
+  targetInfo: SentApplyTargetInfoDTO | null
+  reason: string
+  source: string
+  status: number
+  isRead: boolean
+  createdAt: number
+}
+
+export interface SentApplyListResponseData {
+  items: SentApplyItemDTO[]
+  pagination: PaginationDTO | null
+}
+
 export interface GetFriendApplyListParams {
+  status?: -1 | 0 | 1 | 2
+  page?: number
+  pageSize?: number
+}
+
+export interface GetSentApplyListParams {
   status?: -1 | 0 | 1 | 2
   page?: number
   pageSize?: number
@@ -61,6 +91,32 @@ export interface HandleFriendApplyRequest {
 
 export interface MarkFriendApplyReadRequest {
   applyIds: number[]
+}
+
+export interface GetUnreadApplyCountResponseData {
+  unreadCount: number
+}
+
+export interface CheckIsFriendRequest {
+  userUuid: string
+  peerUuid: string
+}
+
+export interface CheckIsFriendResponseData {
+  isFriend: boolean
+}
+
+export interface GetRelationStatusRequest {
+  userUuid: string
+  peerUuid: string
+}
+
+export interface GetRelationStatusResponseData {
+  relation: 'none' | 'friend' | 'blacklist' | 'deleted' | string
+  isFriend: boolean
+  isBlacklist: boolean
+  remark: string
+  groupTag: string
 }
 
 export interface DeleteFriendRequest {
@@ -136,6 +192,16 @@ export async function fetchFriendApplyList(
   return response.data
 }
 
+export async function fetchSentApplyList(
+  params: GetSentApplyListParams = {}
+): Promise<ApiResponse<SentApplyListResponseData>> {
+  const response = await httpClient.get<ApiResponse<SentApplyListResponseData>>(
+    '/api/v1/auth/friend/apply/sent',
+    { params }
+  )
+  return response.data
+}
+
 export async function handleFriendApply(
   payload: HandleFriendApplyRequest
 ): Promise<ApiResponse<null>> {
@@ -151,6 +217,35 @@ export async function markFriendApplyRead(
 ): Promise<ApiResponse<null>> {
   const response = await httpClient.post<ApiResponse<null>>(
     '/api/v1/auth/friend/apply/read',
+    payload
+  )
+  return response.data
+}
+
+export async function fetchUnreadApplyCount(): Promise<
+  ApiResponse<GetUnreadApplyCountResponseData>
+> {
+  const response = await httpClient.get<ApiResponse<GetUnreadApplyCountResponseData>>(
+    '/api/v1/auth/friend/apply/unread'
+  )
+  return response.data
+}
+
+export async function checkIsFriend(
+  payload: CheckIsFriendRequest
+): Promise<ApiResponse<CheckIsFriendResponseData>> {
+  const response = await httpClient.post<ApiResponse<CheckIsFriendResponseData>>(
+    '/api/v1/auth/friend/check',
+    payload
+  )
+  return response.data
+}
+
+export async function fetchRelationStatus(
+  payload: GetRelationStatusRequest
+): Promise<ApiResponse<GetRelationStatusResponseData>> {
+  const response = await httpClient.post<ApiResponse<GetRelationStatusResponseData>>(
+    '/api/v1/auth/friend/relation',
     payload
   )
   return response.data
