@@ -1,7 +1,12 @@
 import { shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import type { FriendApplyRow, JsonObject } from '../../../shared/types/localdb'
-import { fetchFriendApplyList, type FriendApplyItemDTO } from '../modules/contact/api'
+import {
+  fetchFriendApplyList,
+  handleFriendApply,
+  markFriendApplyRead,
+  type FriendApplyItemDTO
+} from '../modules/contact/api'
 
 function toApplyPayload(item: FriendApplyItemDTO): JsonObject {
   return {
@@ -28,8 +33,39 @@ function mapApplyToRow(userUuid: string, item: FriendApplyItemDTO): FriendApplyR
   }
 }
 
+function isRowRead(row: FriendApplyRow): boolean {
+  const value = row.payload.isRead
+  return value === true || value === 1
+}
+
+function buildUpdatedRow(
+  row: FriendApplyRow,
+  patch: {
+    status?: number
+    isRead?: boolean
+  }
+): FriendApplyRow {
+  const nextStatus = patch.status ?? row.status
+  const nextIsRead = patch.isRead ?? isRowRead(row)
+
+  return {
+    ...row,
+    status: nextStatus,
+    payload: {
+      ...row.payload,
+      status: nextStatus,
+      isRead: nextIsRead
+    },
+    updatedAt: Date.now()
+  }
+}
+
 export const useApplyStore = defineStore('apply', () => {
   const inbox = shallowRef<FriendApplyRow[]>([])
+
+  function reset(): void {
+    inbox.value = []
+  }
 
   async function loadInbox(userUuid: string): Promise<void> {
     if (!userUuid) {
@@ -102,10 +138,60 @@ export const useApplyStore = defineStore('apply', () => {
     await loadInbox(userUuid)
   }
 
+  async function markAsRead(userUuid: string, applyIds: number[]): Promise<void> {
+    if (!userUuid || applyIds.length === 0) {
+      return
+    }
+
+    await markFriendApplyRead({
+      applyIds
+    })
+
+    const updatedRows = inbox.value
+      .filter((row) => applyIds.includes(row.applyId))
+      .map((row) => buildUpdatedRow(row, { isRead: true }))
+
+    if (updatedRows.length > 0) {
+      await upsertInbox(userUuid, updatedRows)
+    }
+  }
+
+  async function handleApplyAction(
+    userUuid: string,
+    applyId: number,
+    action: 1 | 2,
+    remark = ''
+  ): Promise<void> {
+    if (!userUuid || !applyId) {
+      return
+    }
+
+    await handleFriendApply({
+      applyId,
+      action,
+      remark
+    })
+
+    const targetRow = inbox.value.find((row) => row.applyId === applyId)
+    if (!targetRow) {
+      return
+    }
+
+    const nextStatus = action === 1 ? 1 : 2
+    const nextRow = buildUpdatedRow(targetRow, {
+      status: nextStatus,
+      isRead: true
+    })
+    await upsertInbox(userUuid, [nextRow])
+  }
+
   return {
     inbox,
+    reset,
     loadInbox,
     upsertInbox,
-    syncInboxFromServer
+    syncInboxFromServer,
+    markAsRead,
+    handleApplyAction
   }
 })

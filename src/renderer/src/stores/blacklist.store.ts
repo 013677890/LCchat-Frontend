@@ -3,12 +3,15 @@ import { defineStore } from 'pinia'
 import type { BlacklistRow } from '../../../shared/types/localdb'
 import { fetchBlacklist } from '../modules/blacklist/api'
 
-function mapToBlacklistRow(userUuid: string, item: {
-  uuid: string
-  nickname: string
-  avatar: string
-  blacklistedAt: number
-}): BlacklistRow {
+function mapToBlacklistRow(
+  userUuid: string,
+  item: {
+    uuid: string
+    nickname: string
+    avatar: string
+    blacklistedAt: number
+  }
+): BlacklistRow {
   return {
     userUuid,
     peerUuid: item.uuid,
@@ -24,6 +27,10 @@ function mapToBlacklistRow(userUuid: string, item: {
 
 export const useBlacklistStore = defineStore('blacklist', () => {
   const items = shallowRef<BlacklistRow[]>([])
+
+  function reset(): void {
+    items.value = []
+  }
 
   async function load(userUuid: string): Promise<void> {
     if (!userUuid) {
@@ -89,6 +96,7 @@ export const useBlacklistStore = defineStore('blacklist', () => {
 
   return {
     items,
+    reset,
     load,
     replaceAll,
     syncFromServer

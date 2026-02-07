@@ -1,11 +1,7 @@
 import { ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import type { FriendChangeRow, FriendRow, JsonObject } from '../../../shared/types/localdb'
-import {
-  fetchFriendList,
-  syncFriendList,
-  type SyncFriendChangeDTO
-} from '../modules/contact/api'
+import { fetchFriendList, syncFriendList, type SyncFriendChangeDTO } from '../modules/contact/api'
 import type { FriendDTO } from '../shared/types/friend'
 
 function buildFriendPayload(item: FriendDTO): JsonObject {
@@ -63,6 +59,11 @@ export const useFriendStore = defineStore('friend', () => {
   const friends = shallowRef<FriendRow[]>([])
   const version = ref(0)
 
+  function reset(): void {
+    friends.value = []
+    version.value = 0
+  }
+
   async function loadFriends(userUuid: string): Promise<void> {
     if (!userUuid) {
       friends.value = []
@@ -79,7 +80,11 @@ export const useFriendStore = defineStore('friend', () => {
     }
   }
 
-  async function replaceAll(userUuid: string, items: FriendRow[], latestVersion: number): Promise<void> {
+  async function replaceAll(
+    userUuid: string,
+    items: FriendRow[],
+    latestVersion: number
+  ): Promise<void> {
     try {
       await window.api.localdb.friends.replaceAll(userUuid, items, latestVersion)
     } catch (error) {
@@ -174,6 +179,7 @@ export const useFriendStore = defineStore('friend', () => {
   return {
     friends,
     version,
+    reset,
     loadFriends,
     replaceAll,
     applyChanges,

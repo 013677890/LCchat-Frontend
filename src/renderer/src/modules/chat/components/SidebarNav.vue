@@ -4,6 +4,7 @@ import type { MainNavKey } from '../../../stores/app.store'
 const props = defineProps<{
   activeNav: MainNavKey
   userLabel: string
+  discoverBadge?: number
 }>()
 
 const emit = defineEmits<{
@@ -45,6 +46,9 @@ function handleSelect(nav: MainNavKey): void {
       >
         <span class="nav-icon">{{ item.icon }}</span>
         <span>{{ item.label }}</span>
+        <small v-if="item.key === 'discover' && (props.discoverBadge || 0) > 0" class="nav-badge">
+          {{ Math.min(props.discoverBadge || 0, 99) }}
+        </small>
       </button>
     </nav>
 
@@ -112,6 +116,7 @@ function handleSelect(nav: MainNavKey): void {
 }
 
 .nav-item {
+  position: relative;
   border: none;
   background: transparent;
   border-radius: 10px;
@@ -144,6 +149,23 @@ function handleSelect(nav: MainNavKey): void {
   background: #fff;
   box-shadow: var(--shadow-1);
   font-size: 12px;
+}
+
+.nav-badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  padding: 0 4px;
+  display: inline-grid;
+  place-items: center;
+  background: var(--c-danger);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 600;
 }
 
 .logout {

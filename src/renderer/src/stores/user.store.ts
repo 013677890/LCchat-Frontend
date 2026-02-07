@@ -21,6 +21,10 @@ function toProfilePayload(userUuid: string, userInfo: UserProfileDTO): JsonObjec
 export const useUserStore = defineStore('user', () => {
   const profile = shallowRef<ProfileRow | null>(null)
 
+  function reset(): void {
+    profile.value = null
+  }
+
   async function loadProfile(userUuid: string): Promise<void> {
     if (!userUuid) {
       profile.value = null
@@ -70,6 +74,7 @@ export const useUserStore = defineStore('user', () => {
 
   return {
     profile,
+    reset,
     loadProfile,
     saveProfile,
     syncFromServer

@@ -53,6 +53,16 @@ export interface GetFriendApplyListParams {
   pageSize?: number
 }
 
+export interface HandleFriendApplyRequest {
+  applyId: number
+  action: 1 | 2
+  remark?: string
+}
+
+export interface MarkFriendApplyReadRequest {
+  applyIds: number[]
+}
+
 export async function fetchFriendList(
   params: GetFriendListParams = {}
 ): Promise<ApiResponse<GetFriendListResponseData>> {
@@ -79,6 +89,26 @@ export async function fetchFriendApplyList(
   const response = await httpClient.get<ApiResponse<FriendApplyListResponseData>>(
     '/api/v1/auth/friend/apply-list',
     { params }
+  )
+  return response.data
+}
+
+export async function handleFriendApply(
+  payload: HandleFriendApplyRequest
+): Promise<ApiResponse<null>> {
+  const response = await httpClient.post<ApiResponse<null>>(
+    '/api/v1/auth/friend/apply/handle',
+    payload
+  )
+  return response.data
+}
+
+export async function markFriendApplyRead(
+  payload: MarkFriendApplyReadRequest
+): Promise<ApiResponse<null>> {
+  const response = await httpClient.post<ApiResponse<null>>(
+    '/api/v1/auth/friend/apply/read',
+    payload
   )
   return response.data
 }
