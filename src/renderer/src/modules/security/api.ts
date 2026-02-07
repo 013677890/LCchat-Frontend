@@ -29,6 +29,16 @@ export interface ChangeEmailResponseData {
   email: string
 }
 
+export interface DeleteAccountRequest {
+  password: string
+  reason?: string
+}
+
+export interface DeleteAccountResponseData {
+  deleteAt: string
+  recoverDeadline: string
+}
+
 export async function fetchDevices(): Promise<ApiResponse<GetDeviceListResponseData>> {
   const response = await httpClient.get<ApiResponse<GetDeviceListResponseData>>(
     '/api/v1/auth/user/devices'
@@ -63,6 +73,16 @@ export async function changeEmail(
 ): Promise<ApiResponse<ChangeEmailResponseData>> {
   const response = await httpClient.post<ApiResponse<ChangeEmailResponseData>>(
     '/api/v1/auth/user/change-email',
+    payload
+  )
+  return response.data
+}
+
+export async function deleteAccount(
+  payload: DeleteAccountRequest
+): Promise<ApiResponse<DeleteAccountResponseData>> {
+  const response = await httpClient.post<ApiResponse<DeleteAccountResponseData>>(
+    '/api/v1/auth/user/delete-account',
     payload
   )
   return response.data

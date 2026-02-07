@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import ConversationPane from '../components/ConversationPane.vue'
@@ -10,7 +10,7 @@ import ListPane from '../../contact/components/ListPane.vue'
 import ProfileEditorCard from '../../profile/components/ProfileEditorCard.vue'
 import SecurityCenterCard from '../../security/components/SecurityCenterCard.vue'
 import { sendVerifyCode } from '../../auth/api'
-import { changeEmail, changePassword } from '../../security/api'
+import { changeEmail, changePassword, deleteAccount } from '../../security/api'
 import { useAppStore, type MainNavKey } from '../../../stores/app.store'
 import { useApplyStore } from '../../../stores/apply.store'
 import { useAuthStore } from '../../../stores/auth.store'
@@ -71,8 +71,11 @@ const profileSaveError = ref('')
 const securityMessage = ref('')
 const securityError = ref('')
 const sendingVerifyCode = ref(false)
+const codeCooldownSeconds = ref(0)
 const changingEmail = ref(false)
 const changingPassword = ref(false)
+const deletingAccount = ref(false)
+let codeCooldownTimer: ReturnType<typeof setInterval> | null = null
 
 const { activeNav } = storeToRefs(appStore)
 const { userUuid, session } = storeToRefs(authStore)
@@ -375,6 +378,26 @@ function clearSecurityFeedback(): void {
   securityError.value = ''
 }
 
+function stopCodeCooldown(): void {
+  if (codeCooldownTimer) {
+    clearInterval(codeCooldownTimer)
+    codeCooldownTimer = null
+  }
+}
+
+function startCodeCooldown(seconds = 60): void {
+  stopCodeCooldown()
+  codeCooldownSeconds.value = seconds
+  codeCooldownTimer = setInterval(() => {
+    if (codeCooldownSeconds.value <= 1) {
+      stopCodeCooldown()
+      codeCooldownSeconds.value = 0
+      return
+    }
+    codeCooldownSeconds.value -= 1
+  }, 1000)
+}
+
 async function handleDraftChange(value: string): Promise<void> {
   await sessionStore.setDraft(value)
 }
@@ -449,7 +472,7 @@ async function handleProfileSave(payload: UpdateMyProfileRequest): Promise<void>
 }
 
 async function handleRequestEmailCode(nextEmail: string): Promise<void> {
-  if (!nextEmail || sendingVerifyCode.value) {
+  if (!nextEmail || sendingVerifyCode.value || codeCooldownSeconds.value > 0) {
     return
   }
 
@@ -461,6 +484,7 @@ async function handleRequestEmailCode(nextEmail: string): Promise<void> {
       type: 4
     })
     securityMessage.value = '验证码已发送，请查收新邮箱。'
+    startCodeCooldown(60)
   } catch (error) {
     securityError.value = normalizeErrorMessage(error)
   } finally {
@@ -506,6 +530,39 @@ async function handleSubmitPassword(payload: {
   }
 }
 
+async function resetAndNavigateLogin(): Promise<void> {
+  userStore.reset()
+  friendStore.reset()
+  applyStore.reset()
+  blacklistStore.reset()
+  deviceStore.reset()
+  stopCodeCooldown()
+  codeCooldownSeconds.value = 0
+  clearSecurityFeedback()
+  await sessionStore.clearState()
+  appStore.setActiveNav('chat')
+  await router.replace({ name: 'login' })
+}
+
+async function handleSubmitDelete(payload: { password: string; reason?: string }): Promise<void> {
+  if (deletingAccount.value) {
+    return
+  }
+
+  clearSecurityFeedback()
+  deletingAccount.value = true
+  try {
+    const response = await deleteAccount(payload)
+    securityMessage.value = `账号已注销，恢复截止 ${response.data.recoverDeadline || '-'}。正在退出登录...`
+    await authStore.signOut()
+    await resetAndNavigateLogin()
+  } catch (error) {
+    securityError.value = normalizeErrorMessage(error)
+  } finally {
+    deletingAccount.value = false
+  }
+}
+
 async function handleKickDevice(targetDeviceId: string): Promise<void> {
   if (!targetDeviceId || deviceActionPendingId.value) {
     return
@@ -529,15 +586,7 @@ async function handleKickDevice(targetDeviceId: string): Promise<void> {
 
 async function handleLogout(): Promise<void> {
   await authStore.signOut()
-  userStore.reset()
-  friendStore.reset()
-  applyStore.reset()
-  blacklistStore.reset()
-  deviceStore.reset()
-  clearSecurityFeedback()
-  await sessionStore.clearState()
-  appStore.setActiveNav('chat')
-  await router.replace({ name: 'login' })
+  await resetAndNavigateLogin()
 }
 
 onMounted(async () => {
@@ -564,6 +613,10 @@ onMounted(async () => {
       console.warn('sync devices from server failed, keep current state', error)
     })
   ])
+})
+
+onBeforeUnmount(() => {
+  stopCodeCooldown()
 })
 </script>
 
@@ -686,14 +739,17 @@ onMounted(async () => {
             <SecurityCenterCard
               :current-email="currentEmail"
               :sending-code="sendingVerifyCode"
+              :code-cooldown-seconds="codeCooldownSeconds"
               :saving-email="changingEmail"
               :saving-password="changingPassword"
+              :deleting-account="deletingAccount"
               :message="securityMessage"
               :error-message="securityError"
               @clear-feedback="clearSecurityFeedback"
               @request-email-code="handleRequestEmailCode"
               @submit-email="handleSubmitEmail"
               @submit-password="handleSubmitPassword"
+              @submit-delete="handleSubmitDelete"
             />
 
             <section class="device-section">

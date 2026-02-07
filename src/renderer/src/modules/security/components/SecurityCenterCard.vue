@@ -11,11 +11,18 @@ export interface ChangePasswordPayload {
   newPassword: string
 }
 
+export interface DeleteAccountPayload {
+  password: string
+  reason?: string
+}
+
 const props = defineProps<{
   currentEmail: string
   sendingCode?: boolean
+  codeCooldownSeconds?: number
   savingEmail?: boolean
   savingPassword?: boolean
+  deletingAccount?: boolean
   message?: string
   errorMessage?: string
 }>()
@@ -24,6 +31,7 @@ const emit = defineEmits<{
   requestEmailCode: [string]
   submitEmail: [ChangeEmailPayload]
   submitPassword: [ChangePasswordPayload]
+  submitDelete: [DeleteAccountPayload]
   clearFeedback: []
 }>()
 
@@ -31,10 +39,14 @@ const newEmail = ref('')
 const verifyCode = ref('')
 const oldPassword = ref('')
 const newPassword = ref('')
+const deletePassword = ref('')
+const deleteReason = ref('')
+const deleteConfirmText = ref('')
 
 const canSendCode = computed(() => {
   return (
     !props.sendingCode &&
+    (props.codeCooldownSeconds || 0) <= 0 &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.value.trim()) &&
     newEmail.value.trim() !== props.currentEmail
   )
@@ -60,6 +72,29 @@ const canSubmitPassword = computed(() => {
     newVal.length <= 16 &&
     oldVal !== newVal
   )
+})
+
+const canSubmitDelete = computed(() => {
+  const password = deletePassword.value.trim()
+  return (
+    !props.deletingAccount &&
+    password.length >= 6 &&
+    password.length <= 20 &&
+    deleteConfirmText.value.trim().toUpperCase() === 'DELETE'
+  )
+})
+
+const sendCodeLabel = computed(() => {
+  if (props.sendingCode) {
+    return '发送中...'
+  }
+
+  const cooldown = props.codeCooldownSeconds || 0
+  if (cooldown > 0) {
+    return `${cooldown}s后重试`
+  }
+
+  return '发送验证码'
 })
 
 function clearFeedback(): void {
@@ -90,6 +125,18 @@ function handleSubmitPassword(): void {
   emit('submitPassword', {
     oldPassword: oldPassword.value.trim(),
     newPassword: newPassword.value.trim()
+  })
+}
+
+function handleSubmitDelete(): void {
+  if (!canSubmitDelete.value) {
+    return
+  }
+
+  const normalizedReason = deleteReason.value.trim()
+  emit('submitDelete', {
+    password: deletePassword.value.trim(),
+    reason: normalizedReason || undefined
   })
 }
 </script>
@@ -131,7 +178,7 @@ function handleSubmitPassword(): void {
             :disabled="!canSendCode"
             @click="handleSendCode"
           >
-            {{ props.sendingCode ? '发送中...' : '发送验证码' }}
+            {{ sendCodeLabel }}
           </button>
         </div>
 
@@ -177,6 +224,51 @@ function handleSubmitPassword(): void {
           {{ props.savingPassword ? '提交中...' : '确认修改密码' }}
         </button>
       </section>
+
+      <section class="block block--danger">
+        <h4>注销账号</h4>
+        <p class="danger-note">注销后账号将进入可恢复窗口，期间功能不可用。</p>
+
+        <label class="field">
+          <span>密码</span>
+          <input
+            v-model="deletePassword"
+            type="password"
+            maxlength="20"
+            placeholder="输入当前密码确认"
+            @input="clearFeedback"
+          />
+        </label>
+
+        <label class="field">
+          <span>注销原因（可选）</span>
+          <input
+            v-model="deleteReason"
+            maxlength="255"
+            placeholder="例如：长期不再使用"
+            @input="clearFeedback"
+          />
+        </label>
+
+        <label class="field">
+          <span>确认词（输入 DELETE）</span>
+          <input
+            v-model="deleteConfirmText"
+            maxlength="16"
+            placeholder="DELETE"
+            @input="clearFeedback"
+          />
+        </label>
+
+        <button
+          type="button"
+          class="btn btn--danger"
+          :disabled="!canSubmitDelete"
+          @click="handleSubmitDelete"
+        >
+          {{ props.deletingAccount ? '提交中...' : '确认注销账号' }}
+        </button>
+      </section>
     </div>
 
     <p v-if="props.message" class="feedback feedback--ok">{{ props.message }}</p>
@@ -208,7 +300,7 @@ function handleSubmitPassword(): void {
 .security-grid {
   margin-top: 10px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -225,6 +317,18 @@ function handleSubmitPassword(): void {
   margin: 0;
   font-size: 13px;
   color: var(--c-text-main);
+}
+
+.block--danger {
+  border-color: rgba(245, 63, 63, 0.28);
+  background: #fff7f7;
+}
+
+.danger-note {
+  margin: 0;
+  font-size: 12px;
+  color: #b02222;
+  line-height: 1.5;
 }
 
 .field {
@@ -295,6 +399,15 @@ function handleSubmitPassword(): void {
 
 .btn--primary:hover:not(:disabled) {
   background: var(--c-primary-hover);
+}
+
+.btn--danger {
+  color: #fff;
+  background: var(--c-danger);
+}
+
+.btn--danger:hover:not(:disabled) {
+  opacity: 0.9;
 }
 
 .feedback {
