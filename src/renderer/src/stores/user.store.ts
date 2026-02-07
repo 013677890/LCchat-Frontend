@@ -1,8 +1,8 @@
 import { shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import type { JsonObject, ProfileRow } from '../../../shared/types/localdb'
-import { fetchMyProfile } from '../modules/profile/api'
-import type { UserProfileDTO } from '../shared/types/user'
+import { fetchMyProfile, updateMyProfile } from '../modules/profile/api'
+import type { UpdateMyProfileRequest, UserProfileDTO } from '../shared/types/user'
 
 function toProfilePayload(userUuid: string, userInfo: UserProfileDTO): JsonObject {
   return {
@@ -16,6 +16,28 @@ function toProfilePayload(userUuid: string, userInfo: UserProfileDTO): JsonObjec
     birthday: typeof userInfo.birthday === 'string' ? userInfo.birthday : '',
     status: typeof userInfo.status === 'number' ? userInfo.status : 0
   }
+}
+
+function normalizeUpdatePayload(payload: UpdateMyProfileRequest): UpdateMyProfileRequest {
+  const normalized: UpdateMyProfileRequest = {}
+
+  if (typeof payload.nickname === 'string') {
+    normalized.nickname = payload.nickname.trim()
+  }
+
+  if (typeof payload.signature === 'string') {
+    normalized.signature = payload.signature.trim()
+  }
+
+  if (typeof payload.birthday === 'string') {
+    normalized.birthday = payload.birthday
+  }
+
+  if (payload.gender === 1 || payload.gender === 2 || payload.gender === 3) {
+    normalized.gender = payload.gender
+  }
+
+  return normalized
 }
 
 export const useUserStore = defineStore('user', () => {
@@ -72,11 +94,33 @@ export const useUserStore = defineStore('user', () => {
     }
   }
 
+  async function updateProfile(userUuid: string, payload: UpdateMyProfileRequest): Promise<void> {
+    if (!userUuid) {
+      return
+    }
+
+    const normalizedPayload = normalizeUpdatePayload(payload)
+    const response = await updateMyProfile(normalizedPayload)
+    const userInfo = response.data.userInfo
+
+    if (userInfo) {
+      await saveProfile(userUuid, toProfilePayload(userUuid, userInfo))
+      return
+    }
+
+    const basePayload = profile.value?.payload ?? {}
+    await saveProfile(userUuid, {
+      ...basePayload,
+      ...normalizedPayload
+    })
+  }
+
   return {
     profile,
     reset,
     loadProfile,
     saveProfile,
-    syncFromServer
+    syncFromServer,
+    updateProfile
   }
 })

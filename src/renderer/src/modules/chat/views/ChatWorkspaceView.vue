@@ -7,6 +7,7 @@ import MessagePane from '../components/MessagePane.vue'
 import SidebarNav from '../components/SidebarNav.vue'
 import DetailPane from '../../contact/components/DetailPane.vue'
 import ListPane from '../../contact/components/ListPane.vue'
+import ProfileEditorCard from '../../profile/components/ProfileEditorCard.vue'
 import { useAppStore, type MainNavKey } from '../../../stores/app.store'
 import { useApplyStore } from '../../../stores/apply.store'
 import { useAuthStore } from '../../../stores/auth.store'
@@ -17,6 +18,7 @@ import { useSessionStore } from '../../../stores/session.store'
 import { useUserStore } from '../../../stores/user.store'
 import { normalizeErrorMessage } from '../../../shared/utils/error'
 import { formatConversationTime } from '../../../shared/utils/time'
+import type { UpdateMyProfileRequest } from '../../../shared/types/user'
 
 interface ConversationListItem {
   convId: string
@@ -32,6 +34,16 @@ interface PaneItem {
   subtitle: string
   meta?: string
   badge?: number
+}
+
+interface ProfileEditorData {
+  uuid: string
+  email: string
+  telephone: string
+  nickname: string
+  gender: number
+  birthday: string
+  signature: string
 }
 
 const router = useRouter()
@@ -51,6 +63,8 @@ const applyActionPending = ref(false)
 const applyActionError = ref('')
 const deviceActionPendingId = ref('')
 const deviceActionError = ref('')
+const profileSavePending = ref(false)
+const profileSaveError = ref('')
 
 const { activeNav } = storeToRefs(appStore)
 const { userUuid, session } = storeToRefs(authStore)
@@ -292,6 +306,25 @@ const settingsDetailLines = computed(() => {
     { label: '签名', value: getString(payload, 'signature') || '-' }
   ]
 })
+
+const profileEditorData = computed<ProfileEditorData | null>(() => {
+  if (!profile.value) {
+    return null
+  }
+
+  const payload = profile.value.payload
+  const gender = getNumber(payload, 'gender')
+
+  return {
+    uuid: getString(payload, 'uuid') || userUuid.value,
+    email: getString(payload, 'email'),
+    telephone: getString(payload, 'telephone'),
+    nickname: getString(payload, 'nickname'),
+    gender: gender === 1 || gender === 2 || gender === 3 ? gender : 3,
+    birthday: getString(payload, 'birthday'),
+    signature: getString(payload, 'signature')
+  }
+})
 const settingDeviceItems = computed(() =>
   [...devices.value].sort((a, b) => Number(b.isCurrentDevice) - Number(a.isCurrentDevice))
 )
@@ -315,6 +348,10 @@ function handleApplySelect(id: string): void {
 
 function handleBlacklistSelect(id: string): void {
   selectedBlacklistId.value = id
+}
+
+function handleProfileInput(): void {
+  profileSaveError.value = ''
 }
 
 async function handleDraftChange(value: string): Promise<void> {
@@ -371,6 +408,22 @@ async function handleReloadDevices(): Promise<void> {
     await deviceStore.loadDevices()
   } catch (error) {
     deviceActionError.value = normalizeErrorMessage(error)
+  }
+}
+
+async function handleProfileSave(payload: UpdateMyProfileRequest): Promise<void> {
+  if (!userUuid.value || profileSavePending.value) {
+    return
+  }
+
+  profileSavePending.value = true
+  profileSaveError.value = ''
+  try {
+    await userStore.updateProfile(userUuid.value, payload)
+  } catch (error) {
+    profileSaveError.value = normalizeErrorMessage(error)
+  } finally {
+    profileSavePending.value = false
   }
 }
 
@@ -541,47 +594,58 @@ onMounted(async () => {
         empty-text="暂无可展示信息"
       >
         <template #actions>
-          <section class="device-section">
-            <header class="device-header">
-              <h3>设备管理</h3>
-              <button
-                type="button"
-                class="action-btn action-btn--ghost"
-                :disabled="deviceLoading || !!deviceActionPendingId"
-                @click="handleReloadDevices"
-              >
-                刷新
-              </button>
-            </header>
+          <div class="settings-actions">
+            <ProfileEditorCard
+              :profile="profileEditorData"
+              :saving="profileSavePending"
+              :error-message="profileSaveError"
+              @clear-error="handleProfileInput"
+              @submit="handleProfileSave"
+            />
 
-            <p v-if="deviceLoading" class="device-empty">正在拉取设备列表...</p>
-            <ul v-else-if="settingDeviceItems.length > 0" class="device-list">
-              <li v-for="item in settingDeviceItems" :key="item.deviceId" class="device-item">
-                <div class="device-meta">
-                  <strong>{{ item.deviceName || item.deviceId }}</strong>
-                  <p>{{ item.platform || '-' }} · {{ item.appVersion || '-' }}</p>
-                  <small>
-                    {{ getDeviceStatusLabel(item.status) }} · 最近活跃 {{ item.lastSeenAt || '-' }}
-                  </small>
-                </div>
-                <div class="device-actions">
-                  <span v-if="item.isCurrentDevice" class="device-current">当前设备</span>
-                  <button
-                    v-else
-                    type="button"
-                    class="action-btn action-btn--danger"
-                    :disabled="deviceActionPendingId === item.deviceId"
-                    @click="handleKickDevice(item.deviceId)"
-                  >
-                    下线
-                  </button>
-                </div>
-              </li>
-            </ul>
-            <p v-else class="device-empty">暂无设备记录</p>
+            <section class="device-section">
+              <header class="device-header">
+                <h3>设备管理</h3>
+                <button
+                  type="button"
+                  class="action-btn action-btn--ghost"
+                  :disabled="deviceLoading || !!deviceActionPendingId"
+                  @click="handleReloadDevices"
+                >
+                  刷新
+                </button>
+              </header>
 
-            <p v-if="deviceActionError" class="apply-error">{{ deviceActionError }}</p>
-          </section>
+              <p v-if="deviceLoading" class="device-empty">正在拉取设备列表...</p>
+              <ul v-else-if="settingDeviceItems.length > 0" class="device-list">
+                <li v-for="item in settingDeviceItems" :key="item.deviceId" class="device-item">
+                  <div class="device-meta">
+                    <strong>{{ item.deviceName || item.deviceId }}</strong>
+                    <p>{{ item.platform || '-' }} · {{ item.appVersion || '-' }}</p>
+                    <small>
+                      {{ getDeviceStatusLabel(item.status) }} · 最近活跃
+                      {{ item.lastSeenAt || '-' }}
+                    </small>
+                  </div>
+                  <div class="device-actions">
+                    <span v-if="item.isCurrentDevice" class="device-current">当前设备</span>
+                    <button
+                      v-else
+                      type="button"
+                      class="action-btn action-btn--danger"
+                      :disabled="deviceActionPendingId === item.deviceId"
+                      @click="handleKickDevice(item.deviceId)"
+                    >
+                      下线
+                    </button>
+                  </div>
+                </li>
+              </ul>
+              <p v-else class="device-empty">暂无设备记录</p>
+
+              <p v-if="deviceActionError" class="apply-error">{{ deviceActionError }}</p>
+            </section>
+          </div>
         </template>
       </DetailPane>
     </template>
@@ -671,6 +735,11 @@ onMounted(async () => {
   margin: 8px 0 0;
   color: var(--c-danger);
   font-size: 12px;
+}
+
+.settings-actions {
+  display: grid;
+  gap: 12px;
 }
 
 .device-section {

@@ -11,7 +11,9 @@ export interface UpdateMyProfileResponseData {
 }
 
 export async function fetchMyProfile(): Promise<ApiResponse<GetMyProfileResponseData>> {
-  const response = await httpClient.get<ApiResponse<GetMyProfileResponseData>>('/api/v1/auth/user/profile')
+  const response = await httpClient.get<ApiResponse<GetMyProfileResponseData>>(
+    '/api/v1/auth/user/profile'
+  )
   return response.data
 }
 
