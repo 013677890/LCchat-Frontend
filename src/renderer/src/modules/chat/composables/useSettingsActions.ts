@@ -35,6 +35,7 @@ export function useSettingsActions(options: UseSettingsActionsOptions) {
   const deviceActionError = ref('')
   const profileSavePending = ref(false)
   const profileSaveError = ref('')
+  const avatarUploadPending = ref(false)
   const securityMessage = ref('')
   const securityError = ref('')
   const sendingVerifyCode = ref(false)
@@ -128,6 +129,34 @@ export function useSettingsActions(options: UseSettingsActionsOptions) {
       profileSaveError.value = normalizeErrorMessage(error)
     } finally {
       profileSavePending.value = false
+    }
+  }
+
+  async function handleProfileAvatarUpload(file: File): Promise<void> {
+    const userUuid = toValue(options.userUuid)
+    if (!userUuid || avatarUploadPending.value) {
+      return
+    }
+
+    const normalizedType = file.type.toLowerCase()
+    const maxSize = 2 * 1024 * 1024
+    if (normalizedType !== 'image/jpeg' && normalizedType !== 'image/png') {
+      profileSaveError.value = '头像仅支持 JPG 或 PNG 格式。'
+      return
+    }
+    if (file.size > maxSize) {
+      profileSaveError.value = '头像大小不能超过 2MB。'
+      return
+    }
+
+    avatarUploadPending.value = true
+    profileSaveError.value = ''
+    try {
+      await options.userStore.uploadAvatar(userUuid, file)
+    } catch (error) {
+      profileSaveError.value = normalizeErrorMessage(error)
+    } finally {
+      avatarUploadPending.value = false
     }
   }
 
@@ -255,6 +284,7 @@ export function useSettingsActions(options: UseSettingsActionsOptions) {
     deviceActionError.value = ''
     deviceActionPendingId.value = ''
     profileSaveError.value = ''
+    avatarUploadPending.value = false
     clearSecurityFeedback()
     stopCodeCooldown()
     codeCooldownSeconds.value = 0
@@ -271,6 +301,7 @@ export function useSettingsActions(options: UseSettingsActionsOptions) {
     deviceActionError,
     profileSavePending,
     profileSaveError,
+    avatarUploadPending,
     securityMessage,
     securityError,
     sendingVerifyCode,
@@ -284,6 +315,7 @@ export function useSettingsActions(options: UseSettingsActionsOptions) {
     handleRemoveBlacklist,
     handleReloadDevices,
     handleProfileSave,
+    handleProfileAvatarUpload,
     handleRequestEmailCode,
     handleSubmitEmail,
     handleSubmitPassword,

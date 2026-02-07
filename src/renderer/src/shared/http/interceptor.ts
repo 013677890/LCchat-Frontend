@@ -29,7 +29,14 @@ async function attachHeaders(
   const deviceId = await getDeviceId()
   const headers = nextConfig.headers as Record<string, string>
   headers['X-Device-ID'] = deviceId
-  headers['Content-Type'] = 'application/json'
+
+  const isFormDataRequest =
+    typeof FormData !== 'undefined' && nextConfig.data instanceof FormData
+  if (!isFormDataRequest) {
+    headers['Content-Type'] = 'application/json'
+  } else if (typeof headers['Content-Type'] === 'string') {
+    delete headers['Content-Type']
+  }
 
   const session = await window.api.session.get()
   if (session?.accessToken) {

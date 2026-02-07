@@ -1,7 +1,7 @@
 import { shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import type { JsonObject, ProfileRow } from '../../../shared/types/localdb'
-import { fetchMyProfile, updateMyProfile } from '../modules/profile/api'
+import { fetchMyProfile, updateMyProfile, uploadMyAvatar } from '../modules/profile/api'
 import type { UpdateMyProfileRequest, UserProfileDTO } from '../shared/types/user'
 
 function toProfilePayload(userUuid: string, userInfo: UserProfileDTO): JsonObject {
@@ -115,12 +115,32 @@ export const useUserStore = defineStore('user', () => {
     })
   }
 
+  async function uploadAvatar(userUuid: string, file: File): Promise<void> {
+    if (!userUuid) {
+      return
+    }
+
+    const response = await uploadMyAvatar(file)
+    const avatarUrl =
+      typeof response.data.avatarUrl === 'string' ? response.data.avatarUrl.trim() : ''
+    if (!avatarUrl) {
+      return
+    }
+
+    const basePayload = profile.value?.payload ?? {}
+    await saveProfile(userUuid, {
+      ...basePayload,
+      avatar: avatarUrl
+    })
+  }
+
   return {
     profile,
     reset,
     loadProfile,
     saveProfile,
     syncFromServer,
-    updateProfile
+    updateProfile,
+    uploadAvatar
   }
 })

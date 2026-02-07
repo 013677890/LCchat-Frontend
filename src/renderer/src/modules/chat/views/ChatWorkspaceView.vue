@@ -77,6 +77,7 @@ interface ProfileEditorData {
   uuid: string
   email: string
   telephone: string
+  avatar: string
   nickname: string
   gender: number
   birthday: string
@@ -410,6 +411,7 @@ const {
   deviceActionError,
   profileSavePending,
   profileSaveError,
+  avatarUploadPending,
   securityMessage,
   securityError,
   sendingVerifyCode,
@@ -423,6 +425,7 @@ const {
   handleRemoveBlacklist,
   handleReloadDevices,
   handleProfileSave,
+  handleProfileAvatarUpload,
   handleRequestEmailCode,
   handleSubmitEmail,
   handleSubmitPassword,
@@ -545,6 +548,7 @@ const profileEditorData = computed<ProfileEditorData | null>(() => {
     uuid: getString(payload, 'uuid') || userUuid.value,
     email: getString(payload, 'email'),
     telephone: getString(payload, 'telephone'),
+    avatar: getString(payload, 'avatar'),
     nickname: getString(payload, 'nickname'),
     gender: gender === 1 || gender === 2 || gender === 3 ? gender : 3,
     birthday: getString(payload, 'birthday'),
@@ -1126,6 +1130,7 @@ onBeforeUnmount(() => {
             :blacklist-action-error="blacklistActionError"
             :profile="profileEditorData"
             :profile-save-pending="profileSavePending"
+            :profile-avatar-uploading="avatarUploadPending"
             :profile-save-error="profileSaveError"
             :current-email="currentEmail"
             :sending-verify-code="sendingVerifyCode"
@@ -1143,6 +1148,7 @@ onBeforeUnmount(() => {
             @remove-blacklist="handleRemoveBlacklist"
             @profile-clear-error="handleProfileInput"
             @profile-submit="handleProfileSave"
+            @profile-upload-avatar="handleProfileAvatarUpload"
             @security-clear-feedback="clearSecurityFeedback"
             @request-email-code="handleRequestEmailCode"
             @submit-email="handleSubmitEmail"

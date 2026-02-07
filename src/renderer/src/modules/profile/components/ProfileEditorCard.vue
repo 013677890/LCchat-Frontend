@@ -6,6 +6,7 @@ export interface ProfileEditorViewData {
   uuid: string
   email: string
   telephone: string
+  avatar: string
   nickname: string
   gender: number
   birthday: string
@@ -15,14 +16,17 @@ export interface ProfileEditorViewData {
 const props = defineProps<{
   profile: ProfileEditorViewData | null
   saving?: boolean
+  avatarUploading?: boolean
   errorMessage?: string
 }>()
 
 const emit = defineEmits<{
   submit: [UpdateMyProfileRequest]
+  uploadAvatar: [file: File]
   clearError: []
 }>()
 
+const avatarInputRef = ref<HTMLInputElement | null>(null)
 const nickname = ref('')
 const gender = ref(3)
 const birthday = ref('')
@@ -62,6 +66,33 @@ function onFieldInput(): void {
   emit('clearError')
 }
 
+const avatarUrl = computed(() => props.profile?.avatar || '')
+const avatarFallback = computed(() => {
+  const name = props.profile?.nickname?.trim() || props.profile?.uuid || ''
+  return name ? name.slice(0, 1).toUpperCase() : '?'
+})
+
+function triggerAvatarUpload(): void {
+  if (!props.profile || props.avatarUploading) {
+    return
+  }
+
+  emit('clearError')
+  avatarInputRef.value?.click()
+}
+
+function handleAvatarFileChange(event: Event): void {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) {
+    return
+  }
+
+  emit('clearError')
+  emit('uploadAvatar', file)
+  input.value = ''
+}
+
 function handleSubmit(): void {
   if (!props.profile || !hasChanges.value) {
     return
@@ -82,6 +113,32 @@ function handleSubmit(): void {
       <h3>个人资料</h3>
       <p>修改昵称、签名与基础信息，保存后将同步到服务端并回写本地缓存。</p>
     </header>
+
+    <section class="avatar-section">
+      <div class="avatar-preview" aria-hidden="true">
+        <img v-if="avatarUrl" :src="avatarUrl" alt="avatar" />
+        <span v-else>{{ avatarFallback }}</span>
+      </div>
+      <div class="avatar-meta">
+        <strong>头像</strong>
+        <small>仅支持 JPG/PNG，大小不超过 2MB。</small>
+      </div>
+      <input
+        ref="avatarInputRef"
+        class="avatar-input"
+        type="file"
+        accept="image/png,image/jpeg"
+        @change="handleAvatarFileChange"
+      />
+      <button
+        type="button"
+        class="upload-btn"
+        :disabled="!props.profile || props.avatarUploading"
+        @click="triggerAvatarUpload"
+      >
+        {{ props.avatarUploading ? '上传中...' : '上传头像' }}
+      </button>
+    </section>
 
     <div class="meta-grid">
       <p>
@@ -161,6 +218,84 @@ function handleSubmit(): void {
   margin: 6px 0 0;
   color: var(--c-text-muted);
   font-size: 12px;
+}
+
+.avatar-section {
+  margin-top: 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fafbfc;
+}
+
+.avatar-preview {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1px solid var(--c-border);
+  background: #eef1f4;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-preview span {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--c-text-sub);
+}
+
+.avatar-meta {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.avatar-meta strong {
+  color: var(--c-text-main);
+  font-size: 13px;
+}
+
+.avatar-meta small {
+  color: var(--c-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.avatar-input {
+  display: none;
+}
+
+.upload-btn {
+  border: 1px solid var(--c-border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--c-text-sub);
+  padding: 7px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease-out;
+  flex-shrink: 0;
+}
+
+.upload-btn:hover:not(:disabled) {
+  border-color: #c7ced7;
+}
+
+.upload-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .meta-grid {
@@ -270,6 +405,16 @@ function handleSubmit(): void {
 }
 
 @media (max-width: 1199px) {
+  .avatar-section {
+    display: grid;
+    grid-template-columns: 56px 1fr;
+  }
+
+  .upload-btn {
+    grid-column: 1 / -1;
+    justify-self: flex-start;
+  }
+
   .meta-grid {
     grid-template-columns: 1fr;
   }

@@ -10,6 +10,10 @@ export interface UpdateMyProfileResponseData {
   userInfo: UserProfileDTO | null
 }
 
+export interface UploadAvatarResponseData {
+  avatarUrl: string
+}
+
 export async function fetchMyProfile(): Promise<ApiResponse<GetMyProfileResponseData>> {
   const response = await httpClient.get<ApiResponse<GetMyProfileResponseData>>(
     '/api/v1/auth/user/profile'
@@ -23,6 +27,16 @@ export async function updateMyProfile(
   const response = await httpClient.put<ApiResponse<UpdateMyProfileResponseData>>(
     '/api/v1/auth/user/profile',
     payload
+  )
+  return response.data
+}
+
+export async function uploadMyAvatar(file: File): Promise<ApiResponse<UploadAvatarResponseData>> {
+  const formData = new FormData()
+  formData.append('avatar', file)
+  const response = await httpClient.post<ApiResponse<UploadAvatarResponseData>>(
+    '/api/v1/auth/user/avatar',
+    formData
   )
   return response.data
 }

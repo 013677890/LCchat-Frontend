@@ -17,6 +17,7 @@ const props = defineProps<{
   blacklistActionError?: string
   profile: ProfileEditorViewData | null
   profileSavePending?: boolean
+  profileAvatarUploading?: boolean
   profileSaveError?: string
   currentEmail: string
   sendingVerifyCode?: boolean
@@ -38,6 +39,7 @@ const emit = defineEmits<{
   profileSubmit: [
     payload: { nickname?: string; gender?: number; birthday?: string; signature?: string }
   ]
+  profileUploadAvatar: [file: File]
   profileClearError: []
   securityClearFeedback: []
   requestEmailCode: [email: string]
@@ -88,9 +90,11 @@ function getLastSeenText(value: string): string {
     <ProfileEditorCard
       :profile="props.profile"
       :saving="props.profileSavePending"
+      :avatar-uploading="props.profileAvatarUploading"
       :error-message="props.profileSaveError"
       @clear-error="emit('profileClearError')"
       @submit="emit('profileSubmit', $event)"
+      @upload-avatar="emit('profileUploadAvatar', $event)"
     />
 
     <SecurityCenterCard
