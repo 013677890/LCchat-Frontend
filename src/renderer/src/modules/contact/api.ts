@@ -63,6 +63,10 @@ export interface MarkFriendApplyReadRequest {
   applyIds: number[]
 }
 
+export interface DeleteFriendRequest {
+  userUuid: string
+}
+
 export async function fetchFriendList(
   params: GetFriendListParams = {}
 ): Promise<ApiResponse<GetFriendListResponseData>> {
@@ -110,5 +114,10 @@ export async function markFriendApplyRead(
     '/api/v1/auth/friend/apply/read',
     payload
   )
+  return response.data
+}
+
+export async function deleteFriend(payload: DeleteFriendRequest): Promise<ApiResponse<null>> {
+  const response = await httpClient.post<ApiResponse<null>>('/api/v1/auth/friend/delete', payload)
   return response.data
 }

@@ -10,7 +10,9 @@ import ListPane from '../../contact/components/ListPane.vue'
 import ProfileEditorCard from '../../profile/components/ProfileEditorCard.vue'
 import SecurityCenterCard from '../../security/components/SecurityCenterCard.vue'
 import { sendVerifyCode } from '../../auth/api'
+import { resolveRelationErrorMessage } from '../../contact/error-message'
 import { changeEmail, changePassword, deleteAccount } from '../../security/api'
+import { isSendTooFrequentError, resolveSecurityErrorMessage } from '../../security/error-message'
 import { useAppStore, type MainNavKey } from '../../../stores/app.store'
 import { useApplyStore } from '../../../stores/apply.store'
 import { useAuthStore } from '../../../stores/auth.store'
@@ -64,6 +66,10 @@ const selectedApplyId = ref('')
 const selectedBlacklistId = ref('')
 const applyActionPending = ref(false)
 const applyActionError = ref('')
+const contactActionPending = ref(false)
+const contactActionError = ref('')
+const blacklistActionPending = ref(false)
+const blacklistActionError = ref('')
 const deviceActionPendingId = ref('')
 const deviceActionError = ref('')
 const profileSavePending = ref(false)
@@ -357,6 +363,7 @@ async function handleConversationSelect(convId: string): Promise<void> {
 }
 
 function handleFriendSelect(id: string): void {
+  contactActionError.value = ''
   selectedFriendId.value = id
 }
 
@@ -366,6 +373,7 @@ function handleApplySelect(id: string): void {
 }
 
 function handleBlacklistSelect(id: string): void {
+  blacklistActionError.value = ''
   selectedBlacklistId.value = id
 }
 
@@ -446,6 +454,79 @@ async function handleApplyAction(action: 1 | 2): Promise<void> {
   }
 }
 
+async function handleDeleteFriend(): Promise<void> {
+  if (!userUuid.value || !selectedFriendRow.value || contactActionPending.value) {
+    return
+  }
+
+  const nickname =
+    getString(selectedFriendRow.value.payload, 'nickname') || selectedFriendRow.value.peerUuid
+  const confirmed = window.confirm(`确认删除好友「${nickname}」吗？`)
+  if (!confirmed) {
+    return
+  }
+
+  contactActionPending.value = true
+  contactActionError.value = ''
+  try {
+    await friendStore.removeFriend(userUuid.value, selectedFriendRow.value.peerUuid)
+  } catch (error) {
+    contactActionError.value = resolveRelationErrorMessage('delete_friend', error)
+  } finally {
+    contactActionPending.value = false
+  }
+}
+
+async function handleAddBlacklist(): Promise<void> {
+  if (!userUuid.value || !selectedFriendRow.value || contactActionPending.value) {
+    return
+  }
+
+  const payload = selectedFriendRow.value.payload
+  const nickname = getString(payload, 'nickname') || selectedFriendRow.value.peerUuid
+  const confirmed = window.confirm(`确认将「${nickname}」加入黑名单吗？`)
+  if (!confirmed) {
+    return
+  }
+
+  contactActionPending.value = true
+  contactActionError.value = ''
+  try {
+    await blacklistStore.addToBlacklist(userUuid.value, selectedFriendRow.value.peerUuid, {
+      nickname: getString(payload, 'nickname'),
+      avatar: getString(payload, 'avatar')
+    })
+    await friendStore.syncFromServer(userUuid.value)
+  } catch (error) {
+    contactActionError.value = resolveRelationErrorMessage('add_blacklist', error)
+  } finally {
+    contactActionPending.value = false
+  }
+}
+
+async function handleRemoveBlacklist(): Promise<void> {
+  if (!userUuid.value || !selectedBlacklistRow.value || blacklistActionPending.value) {
+    return
+  }
+
+  const nickname =
+    getString(selectedBlacklistRow.value.payload, 'nickname') || selectedBlacklistRow.value.peerUuid
+  const confirmed = window.confirm(`确认将「${nickname}」移出黑名单吗？`)
+  if (!confirmed) {
+    return
+  }
+
+  blacklistActionPending.value = true
+  blacklistActionError.value = ''
+  try {
+    await blacklistStore.removeFromBlacklist(userUuid.value, selectedBlacklistRow.value.peerUuid)
+  } catch (error) {
+    blacklistActionError.value = resolveRelationErrorMessage('remove_blacklist', error)
+  } finally {
+    blacklistActionPending.value = false
+  }
+}
+
 async function handleReloadDevices(): Promise<void> {
   deviceActionError.value = ''
   try {
@@ -486,7 +567,10 @@ async function handleRequestEmailCode(nextEmail: string): Promise<void> {
     securityMessage.value = '验证码已发送，请查收新邮箱。'
     startCodeCooldown(60)
   } catch (error) {
-    securityError.value = normalizeErrorMessage(error)
+    if (isSendTooFrequentError(error)) {
+      startCodeCooldown(60)
+    }
+    securityError.value = resolveSecurityErrorMessage('send_email_code', error)
   } finally {
     sendingVerifyCode.value = false
   }
@@ -504,7 +588,7 @@ async function handleSubmitEmail(payload: { newEmail: string; verifyCode: string
     await userStore.syncFromServer(userUuid.value)
     securityMessage.value = '邮箱已更新。'
   } catch (error) {
-    securityError.value = normalizeErrorMessage(error)
+    securityError.value = resolveSecurityErrorMessage('change_email', error)
   } finally {
     changingEmail.value = false
   }
@@ -524,7 +608,7 @@ async function handleSubmitPassword(payload: {
     await changePassword(payload)
     securityMessage.value = '密码修改成功。'
   } catch (error) {
-    securityError.value = normalizeErrorMessage(error)
+    securityError.value = resolveSecurityErrorMessage('change_password', error)
   } finally {
     changingPassword.value = false
   }
@@ -536,6 +620,8 @@ async function resetAndNavigateLogin(): Promise<void> {
   applyStore.reset()
   blacklistStore.reset()
   deviceStore.reset()
+  contactActionError.value = ''
+  blacklistActionError.value = ''
   stopCodeCooldown()
   codeCooldownSeconds.value = 0
   clearSecurityFeedback()
@@ -557,7 +643,7 @@ async function handleSubmitDelete(payload: { password: string; reason?: string }
     await authStore.signOut()
     await resetAndNavigateLogin()
   } catch (error) {
-    securityError.value = normalizeErrorMessage(error)
+    securityError.value = resolveSecurityErrorMessage('delete_account', error)
   } finally {
     deletingAccount.value = false
   }
@@ -661,7 +747,29 @@ onBeforeUnmount(() => {
         description="好友信息来自本地缓存，在线同步后自动更新。"
         :lines="contactDetailLines"
         empty-text="请选择一位好友查看详情"
-      />
+      >
+        <template #actions>
+          <div v-if="selectedFriendRow" class="contact-actions">
+            <button
+              type="button"
+              class="action-btn action-btn--danger"
+              :disabled="contactActionPending"
+              @click="handleDeleteFriend"
+            >
+              删除好友
+            </button>
+            <button
+              type="button"
+              class="action-btn action-btn--ghost"
+              :disabled="contactActionPending"
+              @click="handleAddBlacklist"
+            >
+              加入黑名单
+            </button>
+          </div>
+          <p v-if="contactActionError" class="apply-error">{{ contactActionError }}</p>
+        </template>
+      </DetailPane>
     </template>
 
     <template v-else-if="activeNav === 'discover'">
@@ -728,6 +836,25 @@ onBeforeUnmount(() => {
       >
         <template #actions>
           <div class="settings-actions">
+            <section v-if="selectedBlacklistRow" class="blacklist-action-card">
+              <h3>黑名单操作</h3>
+              <p>
+                当前选中用户：{{
+                  getString(selectedBlacklistRow.payload, 'nickname') ||
+                  selectedBlacklistRow.peerUuid
+                }}
+              </p>
+              <button
+                type="button"
+                class="action-btn action-btn--ghost"
+                :disabled="blacklistActionPending"
+                @click="handleRemoveBlacklist"
+              >
+                移出黑名单
+              </button>
+              <p v-if="blacklistActionError" class="apply-error">{{ blacklistActionError }}</p>
+            </section>
+
             <ProfileEditorCard
               :profile="profileEditorData"
               :saving="profileSavePending"
@@ -838,6 +965,12 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
+.contact-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .action-btn {
   border: 1px solid transparent;
   border-radius: 8px;
@@ -889,6 +1022,26 @@ onBeforeUnmount(() => {
 .settings-actions {
   display: grid;
   gap: 12px;
+}
+
+.blacklist-action-card {
+  border: 1px solid var(--c-border);
+  border-radius: 14px;
+  background: #fff;
+  padding: 14px;
+  box-shadow: var(--shadow-1);
+}
+
+.blacklist-action-card h3 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--c-text-main);
+}
+
+.blacklist-action-card p {
+  margin: 8px 0;
+  color: var(--c-text-sub);
+  font-size: 12px;
 }
 
 .device-section {

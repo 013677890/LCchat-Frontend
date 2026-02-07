@@ -1,7 +1,7 @@
 import { shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import type { BlacklistRow } from '../../../shared/types/localdb'
-import { fetchBlacklist } from '../modules/blacklist/api'
+import { addBlacklist, fetchBlacklist, removeBlacklist } from '../modules/blacklist/api'
 
 function mapToBlacklistRow(
   userUuid: string,
@@ -94,11 +94,59 @@ export const useBlacklistStore = defineStore('blacklist', () => {
     await load(userUuid)
   }
 
+  async function addToBlacklist(
+    userUuid: string,
+    targetUuid: string,
+    profile?: { nickname?: string; avatar?: string }
+  ): Promise<void> {
+    if (!userUuid || !targetUuid) {
+      return
+    }
+
+    await addBlacklist({
+      targetUuid
+    })
+
+    if (!items.value.some((item) => item.peerUuid === targetUuid)) {
+      const timestamp = Date.now()
+      const nextRows = [
+        {
+          userUuid,
+          peerUuid: targetUuid,
+          payload: {
+            uuid: targetUuid,
+            nickname: profile?.nickname || targetUuid,
+            avatar: profile?.avatar || '',
+            blacklistedAt: timestamp
+          },
+          updatedAt: timestamp
+        },
+        ...items.value
+      ]
+      await replaceAll(userUuid, nextRows)
+    }
+
+    await syncFromServer(userUuid)
+  }
+
+  async function removeFromBlacklist(userUuid: string, targetUuid: string): Promise<void> {
+    if (!userUuid || !targetUuid) {
+      return
+    }
+
+    await removeBlacklist(targetUuid)
+    const nextRows = items.value.filter((item) => item.peerUuid !== targetUuid)
+    await replaceAll(userUuid, nextRows)
+    await syncFromServer(userUuid)
+  }
+
   return {
     items,
     reset,
     load,
     replaceAll,
-    syncFromServer
+    syncFromServer,
+    addToBlacklist,
+    removeFromBlacklist
   }
 })
