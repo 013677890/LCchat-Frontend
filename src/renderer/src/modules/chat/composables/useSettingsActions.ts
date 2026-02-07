@@ -164,6 +164,16 @@ export function useSettingsActions(options: UseSettingsActionsOptions) {
     clearSecurityFeedback()
     changingEmail.value = true
     try {
+      const isValid = await options.authStore.verifyEmailCode(
+        payload.newEmail,
+        payload.verifyCode,
+        4
+      )
+      if (!isValid) {
+        securityError.value = '验证码错误，请重新输入。'
+        return
+      }
+
       await changeEmail(payload)
       await options.userStore.syncFromServer(userUuid)
       securityMessage.value = '邮箱已更新。'

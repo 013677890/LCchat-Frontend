@@ -6,6 +6,7 @@ import { useAuthStore } from '../../../stores/auth.store'
 import { useDeviceStore } from '../../../stores/device.store'
 import { useSessionStore } from '../../../stores/session.store'
 import { normalizeErrorMessage } from '../../../shared/utils/error'
+import { resolveAuthErrorMessage, type AuthAction } from '../error-message'
 
 type AuthMode = 'password' | 'code' | 'register' | 'reset'
 
@@ -134,7 +135,7 @@ async function handleSendCode(): Promise<void> {
     message.value = '验证码已发送，请注意查收邮箱。'
     startCodeCooldown(expireSeconds || 60)
   } catch (error) {
-    errorMessage.value = normalizeErrorMessage(error)
+    errorMessage.value = resolveAuthErrorMessage('send_code', error)
   } finally {
     sendingCode.value = false
   }
@@ -200,7 +201,15 @@ async function handleSubmit(): Promise<void> {
     }
     await handleSubmitResetPassword()
   } catch (error) {
-    errorMessage.value = normalizeErrorMessage(error)
+    let action: AuthAction = 'password_login'
+    if (mode.value === 'code') {
+      action = 'code_login'
+    } else if (mode.value === 'register') {
+      action = 'register'
+    } else if (mode.value === 'reset') {
+      action = 'reset_password'
+    }
+    errorMessage.value = resolveAuthErrorMessage(action, error)
   } finally {
     loading.value = false
   }

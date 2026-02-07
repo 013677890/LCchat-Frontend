@@ -7,12 +7,14 @@ import {
   register,
   resetPassword,
   sendVerifyCode,
+  verifyCode,
   type LoginByCodeResponseData,
   type LoginResponseData,
   type RegisterRequest,
   type ResetPasswordRequest,
   type VerifyCodeType
 } from '../modules/auth/api'
+import { buildLoginDeviceInfo } from '../modules/auth/device-info'
 import { logout } from '../modules/security/api'
 
 function createDemoSession(userUuid: string, deviceId: string): SessionData {
@@ -97,9 +99,11 @@ export const useAuthStore = defineStore('auth', () => {
     }
 
     const deviceId = await window.api.device.getId()
+    const deviceInfo = buildLoginDeviceInfo(deviceId)
     const response = await login({
       account: normalizedAccount,
-      password
+      password,
+      deviceInfo
     })
 
     const nextSession = buildSessionFromLoginResponse(response.data, deviceId)
@@ -113,10 +117,14 @@ export const useAuthStore = defineStore('auth', () => {
       throw new Error('请输入邮箱和验证码')
     }
 
+    await assertVerifyCode(normalizedEmail, normalizedCode, 2)
+
     const deviceId = await window.api.device.getId()
+    const deviceInfo = buildLoginDeviceInfo(deviceId)
     const response = await loginByCode({
       email: normalizedEmail,
-      verifyCode: normalizedCode
+      verifyCode: normalizedCode,
+      deviceInfo
     })
 
     const nextSession = buildSessionFromCodeLoginResponse(response.data, deviceId)
@@ -130,6 +138,8 @@ export const useAuthStore = defineStore('auth', () => {
     if (!normalizedEmail || !normalizedCode || !normalizedPassword) {
       throw new Error('请填写完整的注册信息')
     }
+
+    await assertVerifyCode(normalizedEmail, normalizedCode, 1)
 
     await register({
       email: normalizedEmail,
@@ -161,11 +171,44 @@ export const useAuthStore = defineStore('auth', () => {
       throw new Error('请填写完整的重置信息')
     }
 
+    await assertVerifyCode(normalizedEmail, normalizedCode, 3)
+
     await resetPassword({
       email: normalizedEmail,
       verifyCode: normalizedCode,
       newPassword: normalizedPassword
     })
+  }
+
+  async function verifyEmailCode(
+    email: string,
+    inputVerifyCode: string,
+    type: VerifyCodeType
+  ): Promise<boolean> {
+    const normalizedEmail = email.trim()
+    const normalizedCode = inputVerifyCode.trim()
+    if (!normalizedEmail || !normalizedCode) {
+      throw new Error('请输入邮箱和验证码')
+    }
+
+    const response = await verifyCode({
+      email: normalizedEmail,
+      verifyCode: normalizedCode,
+      type
+    })
+
+    return Boolean(response.data.valid)
+  }
+
+  async function assertVerifyCode(
+    email: string,
+    inputVerifyCode: string,
+    type: VerifyCodeType
+  ): Promise<void> {
+    const isValid = await verifyEmailCode(email, inputVerifyCode, type)
+    if (!isValid) {
+      throw new Error('验证码错误，请重新输入')
+    }
   }
 
   async function signOut(): Promise<void> {
@@ -194,6 +237,7 @@ export const useAuthStore = defineStore('auth', () => {
     signInWithCode,
     registerWithEmail,
     requestVerifyCode,
+    verifyEmailCode,
     resetPasswordByEmail,
     signOut
   }

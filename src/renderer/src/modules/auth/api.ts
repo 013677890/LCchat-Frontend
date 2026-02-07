@@ -4,6 +4,14 @@ import type { ApiResponse } from '../../shared/types/api'
 export interface LoginRequest {
   account: string
   password: string
+  deviceInfo: LoginDeviceInfo
+}
+
+export interface LoginDeviceInfo {
+  deviceName: string
+  platform: string
+  osVersion: string
+  appVersion: string
 }
 
 export interface RegisterRequest {
@@ -44,6 +52,7 @@ export interface LoginResponseData {
 export interface LoginByCodeRequest {
   email: string
   verifyCode: string
+  deviceInfo: LoginDeviceInfo
 }
 
 export type LoginByCodeResponseData = LoginResponseData
