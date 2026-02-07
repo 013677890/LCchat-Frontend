@@ -1,6 +1,7 @@
 import eslintConfig from '@electron-toolkit/eslint-config'
 import eslintConfigPrettier from '@electron-toolkit/eslint-config-prettier'
 import eslintPluginVue from 'eslint-plugin-vue'
+import tsParser from '@typescript-eslint/parser'
 import vueParser from 'vue-eslint-parser'
 
 export default [
@@ -12,11 +13,27 @@ export default [
     languageOptions: {
       parser: vueParser,
       parserOptions: {
+        parser: tsParser,
         ecmaFeatures: {
           jsx: true
         },
         extraFileExtensions: ['.vue']
       }
+    }
+  },
+  {
+    files: ['**/*.{ts,tsx,mts,cts}'],
+    languageOptions: {
+      parser: tsParser
+    },
+    rules: {
+      'no-unused-vars': 'off'
+    }
+  },
+  {
+    files: ['**/*.d.ts', '**/*.vue'],
+    rules: {
+      'no-unused-vars': 'off'
     }
   },
   {

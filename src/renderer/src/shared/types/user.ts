@@ -1,8 +1,7 @@
-import type { JsonObject } from './localdb'
-
-export interface UserProfileDTO extends JsonObject {
+export interface UserProfileDTO {
   userUuid?: string
   nickname?: string
   avatar?: string
   bio?: string
+  [key: string]: unknown
 }

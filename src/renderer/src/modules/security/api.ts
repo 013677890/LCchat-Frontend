@@ -13,7 +13,9 @@ export async function fetchDevices(): Promise<ApiResponse<DeviceRecord[]>> {
   return response.data
 }
 
-export async function logout(): Promise<ApiResponse<null>> {
-  const response = await httpClient.post<ApiResponse<null>>('/api/v1/auth/user/logout')
+export async function logout(deviceId: string): Promise<ApiResponse<null>> {
+  const response = await httpClient.post<ApiResponse<null>>('/api/v1/auth/user/logout', {
+    deviceId
+  })
   return response.data
 }

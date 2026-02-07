@@ -20,7 +20,7 @@ type PayloadRow = {
 function bind(
   ipcMain: IpcMain,
   channel: string,
-  listener: (...args: unknown[]) => Promise<unknown> | unknown
+  listener: (...args: any[]) => Promise<any> | any
 ): void {
   ipcMain.removeHandler(channel)
   ipcMain.handle(channel, (_, ...args) => listener(...args))

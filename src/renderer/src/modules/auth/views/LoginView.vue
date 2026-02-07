@@ -11,7 +11,8 @@ const authStore = useAuthStore()
 const deviceStore = useDeviceStore()
 const sessionStore = useSessionStore()
 
-const account = ref('demo-user')
+const account = ref('')
+const password = ref('')
 const loading = ref(false)
 const errorMessage = ref('')
 const deviceId = ref('')
@@ -21,7 +22,22 @@ async function handleSubmit(): Promise<void> {
   errorMessage.value = ''
 
   try {
-    await authStore.signInWithDemoAccount(account.value)
+    await authStore.signInWithPassword(account.value, password.value)
+    await sessionStore.bootstrap(authStore.userUuid)
+    await router.replace({ name: 'chat' })
+  } catch (error) {
+    errorMessage.value = normalizeErrorMessage(error)
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleDemoLogin(): Promise<void> {
+  loading.value = true
+  errorMessage.value = ''
+
+  try {
+    await authStore.signInWithDemoAccount(account.value || 'demo-user')
     await sessionStore.bootstrap(authStore.userUuid)
     await router.replace({ name: 'chat' })
   } catch (error) {
@@ -45,16 +61,26 @@ onMounted(async () => {
       </header>
 
       <label class="field">
-        <span>账号标识（演示）</span>
-        <input v-model.trim="account" placeholder="输入用户 UUID 或昵称" />
+        <span>账号（邮箱或手机号）</span>
+        <input v-model.trim="account" placeholder="例如: demo@test.com" />
+      </label>
+
+      <label class="field">
+        <span>密码</span>
+        <input v-model="password" type="password" placeholder="输入登录密码" />
       </label>
 
       <p class="device">设备 ID: {{ deviceId || '加载中...' }}</p>
       <p v-if="errorMessage" class="error">{{ errorMessage }}</p>
 
-      <button type="button" :disabled="loading" @click="handleSubmit">
-        {{ loading ? '登录中...' : '进入 LCchat' }}
-      </button>
+      <div class="actions">
+        <button type="button" :disabled="loading" @click="handleSubmit">
+          {{ loading ? '登录中...' : '账号登录' }}
+        </button>
+        <button type="button" class="secondary" :disabled="loading" @click="handleDemoLogin">
+          演示登录
+        </button>
+      </div>
     </section>
   </main>
 </template>
@@ -150,5 +176,20 @@ button:hover {
 button:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+
+.actions {
+  margin-top: 18px;
+  display: grid;
+  gap: 10px;
+}
+
+.secondary {
+  background: #ecf2ef;
+  color: var(--c-text-main);
+}
+
+.secondary:hover {
+  background: #dfe9e3;
 }
 </style>

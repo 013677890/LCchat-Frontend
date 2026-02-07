@@ -1,6 +1,8 @@
 import { computed, ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import type { SessionData } from '../../../shared/types/localdb'
+import { login, type LoginResponseData } from '../modules/auth/api'
+import { logout } from '../modules/security/api'
 
 function createDemoSession(userUuid: string, deviceId: string): SessionData {
   return {
@@ -8,6 +10,21 @@ function createDemoSession(userUuid: string, deviceId: string): SessionData {
     accessToken: `demo_access_${userUuid}`,
     refreshToken: `demo_refresh_${userUuid}`,
     expiresAt: Date.now() + 60 * 60 * 1000,
+    deviceId
+  }
+}
+
+function buildSessionFromLoginResponse(payload: LoginResponseData, deviceId: string): SessionData {
+  const userUuid = payload.userInfo?.uuid
+  if (!userUuid) {
+    throw new Error('登录响应缺少用户信息')
+  }
+
+  return {
+    userUuid,
+    accessToken: payload.accessToken,
+    refreshToken: payload.refreshToken,
+    expiresAt: Date.now() + Math.max(0, payload.expiresIn) * 1000,
     deviceId
   }
 }
@@ -44,7 +61,32 @@ export const useAuthStore = defineStore('auth', () => {
     await signIn(createDemoSession(normalizedUser, deviceId))
   }
 
+  async function signInWithPassword(account: string, password: string): Promise<void> {
+    const normalizedAccount = account.trim()
+    if (!normalizedAccount || !password) {
+      throw new Error('请输入账号和密码')
+    }
+
+    const deviceId = await window.api.device.getId()
+    const response = await login({
+      account: normalizedAccount,
+      password
+    })
+
+    const nextSession = buildSessionFromLoginResponse(response.data, deviceId)
+    await signIn(nextSession)
+  }
+
   async function signOut(): Promise<void> {
+    const currentSession = session.value
+    if (currentSession?.deviceId) {
+      try {
+        await logout(currentSession.deviceId)
+      } catch (error) {
+        console.warn('server logout failed, continue local signout', error)
+      }
+    }
+
     session.value = null
     await window.api.session.clear()
   }
@@ -57,6 +99,7 @@ export const useAuthStore = defineStore('auth', () => {
     hydrateSession,
     signIn,
     signInWithDemoAccount,
+    signInWithPassword,
     signOut
   }
 })

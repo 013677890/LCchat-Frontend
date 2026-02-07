@@ -7,6 +7,7 @@ import MessagePane from '../components/MessagePane.vue'
 import SidebarNav from '../components/SidebarNav.vue'
 import { useAppStore, type MainNavKey } from '../../../stores/app.store'
 import { useAuthStore } from '../../../stores/auth.store'
+import { useFriendStore } from '../../../stores/friend.store'
 import { useSessionStore } from '../../../stores/session.store'
 import { formatConversationTime } from '../../../shared/utils/time'
 
@@ -21,6 +22,7 @@ interface ConversationListItem {
 const router = useRouter()
 const appStore = useAppStore()
 const authStore = useAuthStore()
+const friendStore = useFriendStore()
 const sessionStore = useSessionStore()
 
 const { activeNav } = storeToRefs(appStore)
@@ -86,6 +88,7 @@ onMounted(async () => {
   }
 
   await sessionStore.bootstrap(authStore.userUuid)
+  await friendStore.syncFromServer(authStore.userUuid)
 })
 </script>
 
