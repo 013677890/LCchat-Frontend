@@ -15,6 +15,27 @@ export interface GetDeviceListResponseData {
   devices: DeviceRecord[]
 }
 
+export interface OnlineStatusItem {
+  userUuid: string
+  isOnline: boolean
+  lastSeenAt: string
+}
+
+export interface GetOnlineStatusResponseData {
+  userUuid: string
+  isOnline: boolean
+  lastSeenAt: string
+  onlinePlatforms: string[]
+}
+
+export interface BatchOnlineStatusRequest {
+  userUuids: string[]
+}
+
+export interface BatchOnlineStatusResponseData {
+  users: OnlineStatusItem[]
+}
+
 export interface ChangePasswordRequest {
   oldPassword: string
   newPassword: string
@@ -56,6 +77,25 @@ export async function logout(deviceId: string): Promise<ApiResponse<null>> {
 export async function kickDevice(deviceId: string): Promise<ApiResponse<null>> {
   const response = await httpClient.delete<ApiResponse<null>>(
     `/api/v1/auth/user/devices/${encodeURIComponent(deviceId)}`
+  )
+  return response.data
+}
+
+export async function fetchOnlineStatus(
+  userUuid: string
+): Promise<ApiResponse<GetOnlineStatusResponseData>> {
+  const response = await httpClient.get<ApiResponse<GetOnlineStatusResponseData>>(
+    `/api/v1/auth/user/online-status/${encodeURIComponent(userUuid)}`
+  )
+  return response.data
+}
+
+export async function batchFetchOnlineStatus(
+  payload: BatchOnlineStatusRequest
+): Promise<ApiResponse<BatchOnlineStatusResponseData>> {
+  const response = await httpClient.post<ApiResponse<BatchOnlineStatusResponseData>>(
+    '/api/v1/auth/user/batch-online-status',
+    payload
   )
   return response.data
 }

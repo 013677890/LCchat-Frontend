@@ -4,6 +4,8 @@ interface SearchResultItem {
   nickname: string
   signature: string
   isFriend: boolean
+  isOnline: boolean | null
+  lastSeenAt: string
 }
 
 const props = defineProps<{
@@ -94,6 +96,19 @@ function handleSendApply(targetUuid: string): void {
         <div class="search-result-meta">
           <strong>{{ item.nickname || item.uuid }}</strong>
           <p>{{ item.signature || item.uuid }}</p>
+          <small
+            class="presence"
+            :class="{
+              'presence--online': item.isOnline === true,
+              'presence--offline': item.isOnline === false
+            }"
+          >
+            <template v-if="item.isOnline === true">在线</template>
+            <template v-else-if="item.isOnline === false">
+              离线{{ item.lastSeenAt ? ` · ${item.lastSeenAt}` : '' }}
+            </template>
+            <template v-else>状态未知</template>
+          </small>
         </div>
         <button
           type="button"
@@ -204,6 +219,21 @@ function handleSendApply(targetUuid: string): void {
   margin: 4px 0 0;
   color: var(--c-text-sub);
   font-size: 12px;
+}
+
+.presence {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--c-text-muted);
+}
+
+.presence--online {
+  color: var(--c-success);
+}
+
+.presence--offline {
+  color: var(--c-text-muted);
 }
 
 .action-btn {

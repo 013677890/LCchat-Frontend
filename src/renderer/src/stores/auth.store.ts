@@ -1,7 +1,18 @@
 import { computed, ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import type { SessionData } from '../../../shared/types/localdb'
-import { login, type LoginResponseData } from '../modules/auth/api'
+import {
+  login,
+  loginByCode,
+  register,
+  resetPassword,
+  sendVerifyCode,
+  type LoginByCodeResponseData,
+  type LoginResponseData,
+  type RegisterRequest,
+  type ResetPasswordRequest,
+  type VerifyCodeType
+} from '../modules/auth/api'
 import { logout } from '../modules/security/api'
 
 function createDemoSession(userUuid: string, deviceId: string): SessionData {
@@ -18,6 +29,24 @@ function buildSessionFromLoginResponse(payload: LoginResponseData, deviceId: str
   const userUuid = payload.userInfo?.uuid
   if (!userUuid) {
     throw new Error('登录响应缺少用户信息')
+  }
+
+  return {
+    userUuid,
+    accessToken: payload.accessToken,
+    refreshToken: payload.refreshToken,
+    expiresAt: Date.now() + Math.max(0, payload.expiresIn) * 1000,
+    deviceId
+  }
+}
+
+function buildSessionFromCodeLoginResponse(
+  payload: LoginByCodeResponseData,
+  deviceId: string
+): SessionData {
+  const userUuid = payload.userInfo?.uuid
+  if (!userUuid) {
+    throw new Error('验证码登录响应缺少用户信息')
   }
 
   return {
@@ -77,6 +106,68 @@ export const useAuthStore = defineStore('auth', () => {
     await signIn(nextSession)
   }
 
+  async function signInWithCode(email: string, verifyCode: string): Promise<void> {
+    const normalizedEmail = email.trim()
+    const normalizedCode = verifyCode.trim()
+    if (!normalizedEmail || !normalizedCode) {
+      throw new Error('请输入邮箱和验证码')
+    }
+
+    const deviceId = await window.api.device.getId()
+    const response = await loginByCode({
+      email: normalizedEmail,
+      verifyCode: normalizedCode
+    })
+
+    const nextSession = buildSessionFromCodeLoginResponse(response.data, deviceId)
+    await signIn(nextSession)
+  }
+
+  async function registerWithEmail(payload: RegisterRequest): Promise<void> {
+    const normalizedEmail = payload.email.trim()
+    const normalizedCode = payload.verifyCode.trim()
+    const normalizedPassword = payload.password
+    if (!normalizedEmail || !normalizedCode || !normalizedPassword) {
+      throw new Error('请填写完整的注册信息')
+    }
+
+    await register({
+      email: normalizedEmail,
+      verifyCode: normalizedCode,
+      password: normalizedPassword,
+      nickname: payload.nickname?.trim() || undefined,
+      telephone: payload.telephone?.trim() || undefined
+    })
+  }
+
+  async function requestVerifyCode(email: string, type: VerifyCodeType): Promise<number> {
+    const normalizedEmail = email.trim()
+    if (!normalizedEmail) {
+      throw new Error('请输入邮箱')
+    }
+
+    const response = await sendVerifyCode({
+      email: normalizedEmail,
+      type
+    })
+    return Number(response.data.expireSeconds) || 60
+  }
+
+  async function resetPasswordByEmail(payload: ResetPasswordRequest): Promise<void> {
+    const normalizedEmail = payload.email.trim()
+    const normalizedCode = payload.verifyCode.trim()
+    const normalizedPassword = payload.newPassword
+    if (!normalizedEmail || !normalizedCode || !normalizedPassword) {
+      throw new Error('请填写完整的重置信息')
+    }
+
+    await resetPassword({
+      email: normalizedEmail,
+      verifyCode: normalizedCode,
+      newPassword: normalizedPassword
+    })
+  }
+
   async function signOut(): Promise<void> {
     const currentSession = session.value
     if (currentSession?.deviceId) {
@@ -100,6 +191,10 @@ export const useAuthStore = defineStore('auth', () => {
     signIn,
     signInWithDemoAccount,
     signInWithPassword,
+    signInWithCode,
+    registerWithEmail,
+    requestVerifyCode,
+    resetPasswordByEmail,
     signOut
   }
 })

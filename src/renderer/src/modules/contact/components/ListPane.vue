@@ -5,6 +5,7 @@ interface ListPaneItem {
   subtitle: string
   meta?: string
   badge?: number
+  online?: boolean
 }
 
 const props = defineProps<{
@@ -42,7 +43,14 @@ function handleSelect(id: string): void {
           @click="handleSelect(item.id)"
         >
           <div class="item-head">
-            <strong>{{ item.title }}</strong>
+            <div class="item-title">
+              <span
+                v-if="typeof item.online === 'boolean'"
+                class="presence-dot"
+                :class="item.online ? 'presence-dot--online' : 'presence-dot--offline'"
+              />
+              <strong>{{ item.title }}</strong>
+            </div>
             <span v-if="item.meta">{{ item.meta }}</span>
           </div>
           <div class="item-body">
@@ -123,6 +131,29 @@ function handleSelect(id: string): void {
   color: var(--c-text-main);
   font-size: 14px;
   line-height: 1.4;
+}
+
+.item-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.presence-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.presence-dot--online {
+  background: var(--c-success);
+  box-shadow: 0 0 0 2px rgba(0, 180, 42, 0.16);
+}
+
+.presence-dot--offline {
+  background: #c3c9d2;
 }
 
 .item-head span {

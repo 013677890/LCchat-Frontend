@@ -9,9 +9,7 @@ import DetailPane from '../../contact/components/DetailPane.vue'
 import ListPane from '../../contact/components/ListPane.vue'
 import UserSearchCard from '../../discover/components/UserSearchCard.vue'
 import SentApplyListCard from '../../discover/components/SentApplyListCard.vue'
-import ProfileEditorCard from '../../profile/components/ProfileEditorCard.vue'
-import SecurityCenterCard from '../../security/components/SecurityCenterCard.vue'
-import { sendVerifyCode } from '../../auth/api'
+import SettingsActionsPanel from '../../settings/components/SettingsActionsPanel.vue'
 import {
   fetchRelationStatus,
   searchUsers,
@@ -19,19 +17,18 @@ import {
   type SearchUserItemDTO
 } from '../../contact/api'
 import { resolveRelationErrorMessage } from '../../contact/error-message'
-import { changeEmail, changePassword, deleteAccount } from '../../security/api'
-import { isSendTooFrequentError, resolveSecurityErrorMessage } from '../../security/error-message'
+import { useSettingsActions } from '../composables/useSettingsActions'
 import { useAppStore, type MainNavKey } from '../../../stores/app.store'
 import { useApplyStore } from '../../../stores/apply.store'
 import { useAuthStore } from '../../../stores/auth.store'
 import { useBlacklistStore } from '../../../stores/blacklist.store'
 import { useDeviceStore } from '../../../stores/device.store'
 import { useFriendStore } from '../../../stores/friend.store'
+import { usePresenceStore } from '../../../stores/presence.store'
 import { useSessionStore } from '../../../stores/session.store'
 import { useUserStore } from '../../../stores/user.store'
 import { normalizeErrorMessage } from '../../../shared/utils/error'
 import { formatConversationTime } from '../../../shared/utils/time'
-import type { UpdateMyProfileRequest } from '../../../shared/types/user'
 
 interface ConversationListItem {
   convId: string
@@ -47,6 +44,7 @@ interface PaneItem {
   subtitle: string
   meta?: string
   badge?: number
+  online?: boolean
 }
 
 interface SearchResultItem {
@@ -54,6 +52,8 @@ interface SearchResultItem {
   nickname: string
   signature: string
   isFriend: boolean
+  isOnline: boolean | null
+  lastSeenAt: string
 }
 
 interface SentApplyListItem {
@@ -82,6 +82,7 @@ const authStore = useAuthStore()
 const blacklistStore = useBlacklistStore()
 const deviceStore = useDeviceStore()
 const friendStore = useFriendStore()
+const presenceStore = usePresenceStore()
 const sessionStore = useSessionStore()
 const userStore = useUserStore()
 
@@ -104,27 +105,14 @@ const searchMessage = ref('')
 const retryingSentApplyId = ref(0)
 const sentApplyError = ref('')
 const sentApplyMessage = ref('')
-const blacklistActionPending = ref(false)
-const blacklistActionError = ref('')
-const deviceActionPendingId = ref('')
-const deviceActionError = ref('')
-const profileSavePending = ref(false)
-const profileSaveError = ref('')
-const securityMessage = ref('')
-const securityError = ref('')
-const sendingVerifyCode = ref(false)
-const codeCooldownSeconds = ref(0)
-const changingEmail = ref(false)
-const changingPassword = ref(false)
-const deletingAccount = ref(false)
-let codeCooldownTimer: ReturnType<typeof setInterval> | null = null
 
 const { activeNav } = storeToRefs(appStore)
 const { userUuid, session } = storeToRefs(authStore)
 const { profile } = storeToRefs(userStore)
 const { friends, tagSuggestions } = storeToRefs(friendStore)
+const { statusByUserUuid: presenceByUserUuid } = storeToRefs(presenceStore)
 const { items: blacklistItems } = storeToRefs(blacklistStore)
-const { devices, loading: deviceLoading } = storeToRefs(deviceStore)
+const { loading: deviceLoading } = storeToRefs(deviceStore)
 const {
   inbox: applyInbox,
   sent: sentApplies,
@@ -169,20 +157,27 @@ function getApplyStatusLabel(status: number): string {
   return `未知(${status})`
 }
 
-function getDeviceStatusLabel(status: number): string {
-  if (status === 0) {
-    return '在线'
+function getPresenceState(userUuid: string): { isOnline: boolean | null; lastSeenAt: string } {
+  const normalizedUuid = userUuid.trim()
+  if (!normalizedUuid) {
+    return {
+      isOnline: null,
+      lastSeenAt: ''
+    }
   }
-  if (status === 1) {
-    return '离线'
+
+  const status = presenceByUserUuid.value[normalizedUuid]
+  if (!status) {
+    return {
+      isOnline: null,
+      lastSeenAt: ''
+    }
   }
-  if (status === 2) {
-    return '已注销'
+
+  return {
+    isOnline: status.isOnline,
+    lastSeenAt: status.lastSeenAt
   }
-  if (status === 3) {
-    return '已被下线'
-  }
-  return `未知(${status})`
 }
 
 function mapSearchResult(item: SearchUserItemDTO): SearchResultItem {
@@ -190,7 +185,9 @@ function mapSearchResult(item: SearchUserItemDTO): SearchResultItem {
     uuid: item.uuid,
     nickname: item.nickname || item.uuid,
     signature: item.signature || '',
-    isFriend: Boolean(item.isFriend)
+    isFriend: Boolean(item.isFriend),
+    isOnline: null,
+    lastSeenAt: ''
   }
 }
 
@@ -207,6 +204,17 @@ function formatDateTime(timestamp: number): string {
     return '-'
   }
   return new Date(timestamp).toLocaleString('zh-CN')
+}
+
+function formatPresenceText(userUuid: string): string {
+  const state = getPresenceState(userUuid)
+  if (state.isOnline === true) {
+    return '在线'
+  }
+  if (state.isOnline === false) {
+    return state.lastSeenAt ? `离线 · ${state.lastSeenAt}` : '离线'
+  }
+  return '状态未知'
 }
 
 const userLabel = computed(() => {
@@ -239,12 +247,25 @@ const conversationItems = computed<ConversationListItem[]>(() =>
 )
 
 const friendPaneItems = computed<PaneItem[]>(() =>
-  friends.value.map((row) => ({
-    id: row.peerUuid,
-    title: getString(row.payload, 'remark') || getString(row.payload, 'nickname') || row.peerUuid,
-    subtitle: getString(row.payload, 'signature') || '暂无签名',
-    meta: getString(row.payload, 'groupTag') || '未分组'
-  }))
+  friends.value.map((row) => {
+    const presenceState = getPresenceState(row.peerUuid)
+    const signature = getString(row.payload, 'signature') || ''
+    const presenceText =
+      presenceState.isOnline === true
+        ? '在线'
+        : presenceState.isOnline === false
+          ? presenceState.lastSeenAt
+            ? `离线 · ${presenceState.lastSeenAt}`
+            : '离线'
+          : '状态未知'
+    return {
+      id: row.peerUuid,
+      title: getString(row.payload, 'remark') || getString(row.payload, 'nickname') || row.peerUuid,
+      subtitle: signature ? `${presenceText} · ${signature}` : presenceText,
+      meta: getString(row.payload, 'groupTag') || '未分组',
+      online: presenceState.isOnline === true
+    }
+  })
 )
 
 const applyPaneItems = computed<PaneItem[]>(() =>
@@ -268,6 +289,16 @@ const blacklistPaneItems = computed<PaneItem[]>(() =>
 
 const existingFriendIds = computed(() => friends.value.map((item) => item.peerUuid))
 const blacklistPeerIds = computed(() => blacklistItems.value.map((item) => item.peerUuid))
+const searchResultItems = computed<SearchResultItem[]>(() =>
+  searchResults.value.map((item) => {
+    const presence = getPresenceState(item.uuid)
+    return {
+      ...item,
+      isOnline: presence.isOnline,
+      lastSeenAt: presence.lastSeenAt
+    }
+  })
+)
 const sentApplyItems = computed<SentApplyListItem[]>(() =>
   sentApplies.value.map((row) => ({
     applyId: row.applyId,
@@ -325,6 +356,27 @@ watch(
   { immediate: true }
 )
 
+watch(
+  () => friends.value.map((item) => item.peerUuid).join(','),
+  (joinedIds) => {
+    if (!joinedIds) {
+      return
+    }
+    void presenceStore.syncBatch(joinedIds.split(','))
+  },
+  { immediate: true }
+)
+
+watch(
+  () => searchResults.value.map((item) => item.uuid).join(','),
+  (joinedIds) => {
+    if (!joinedIds) {
+      return
+    }
+    void presenceStore.syncBatch(joinedIds.split(','))
+  }
+)
+
 const selectedFriendRow = computed(
   () => friends.value.find((item) => item.peerUuid === selectedFriendId.value) ?? null
 )
@@ -333,6 +385,52 @@ const selectedApplyRow = computed(
 )
 const selectedBlacklistRow = computed(
   () => blacklistItems.value.find((item) => item.peerUuid === selectedBlacklistId.value) ?? null
+)
+const settingsActions = useSettingsActions({
+  userUuid,
+  session,
+  selectedBlacklistRow,
+  authStore,
+  userStore,
+  friendStore,
+  blacklistStore,
+  deviceStore,
+  onSignedOut: resetAndNavigateLogin
+})
+const {
+  blacklistActionPending,
+  blacklistActionError,
+  deviceActionPendingId,
+  deviceActionError,
+  profileSavePending,
+  profileSaveError,
+  securityMessage,
+  securityError,
+  sendingVerifyCode,
+  codeCooldownSeconds,
+  changingEmail,
+  changingPassword,
+  deletingAccount,
+  settingDeviceItems,
+  clearProfileError,
+  clearSecurityFeedback,
+  handleRemoveBlacklist,
+  handleReloadDevices,
+  handleProfileSave,
+  handleRequestEmailCode,
+  handleSubmitEmail,
+  handleSubmitPassword,
+  handleSubmitDelete,
+  handleKickDevice,
+  handleLogout,
+  resetState: resetSettingsState,
+  dispose: disposeSettingsActions
+} = settingsActions
+const selectedBlacklistLabel = computed(() =>
+  selectedBlacklistRow.value
+    ? getString(selectedBlacklistRow.value.payload, 'nickname') ||
+      selectedBlacklistRow.value.peerUuid
+    : ''
 )
 const tagSuggestionNames = computed(() => tagSuggestions.value.map((item) => item.tagName))
 const contactRemarkChanged = computed(() => {
@@ -377,6 +475,7 @@ const contactDetailLines = computed(() => {
   return [
     { label: '好友 UUID', value: selectedFriendRow.value.peerUuid },
     { label: '昵称', value: getString(payload, 'nickname') || '-' },
+    { label: '在线状态', value: formatPresenceText(selectedFriendRow.value.peerUuid) },
     { label: '备注', value: getString(payload, 'remark') || '-' },
     { label: '标签', value: getString(payload, 'groupTag') || '-' },
     { label: '来源', value: getString(payload, 'source') || '-' },
@@ -454,10 +553,6 @@ const currentEmail = computed(() => {
   return getString(profile.value.payload, 'email')
 })
 
-const settingDeviceItems = computed(() =>
-  [...devices.value].sort((a, b) => Number(b.isCurrentDevice) - Number(a.isCurrentDevice))
-)
-
 async function handleNavChange(nextNav: MainNavKey): Promise<void> {
   appStore.setActiveNav(nextNav)
 }
@@ -482,7 +577,7 @@ function handleBlacklistSelect(id: string): void {
 }
 
 function handleProfileInput(): void {
-  profileSaveError.value = ''
+  clearProfileError()
 }
 
 function handleContactInput(): void {
@@ -501,31 +596,6 @@ function clearSentApplyFeedback(): void {
 
 function handleSearchInput(): void {
   clearSearchFeedback()
-}
-
-function clearSecurityFeedback(): void {
-  securityMessage.value = ''
-  securityError.value = ''
-}
-
-function stopCodeCooldown(): void {
-  if (codeCooldownTimer) {
-    clearInterval(codeCooldownTimer)
-    codeCooldownTimer = null
-  }
-}
-
-function startCodeCooldown(seconds = 60): void {
-  stopCodeCooldown()
-  codeCooldownSeconds.value = seconds
-  codeCooldownTimer = setInterval(() => {
-    if (codeCooldownSeconds.value <= 1) {
-      stopCodeCooldown()
-      codeCooldownSeconds.value = 0
-      return
-    }
-    codeCooldownSeconds.value -= 1
-  }, 1000)
 }
 
 async function handleDraftChange(value: string): Promise<void> {
@@ -715,7 +785,7 @@ async function handleSendFriendApply(targetUuid: string): Promise<void> {
       source: 'desktop_search'
     })
     const target =
-      searchResults.value.find((item) => item.uuid === targetUuid)?.nickname || targetUuid
+      searchResultItems.value.find((item) => item.uuid === targetUuid)?.nickname || targetUuid
     searchMessage.value = `好友申请已发送给 ${target}。`
     await applyStore.syncSentFromServer(userUuid.value)
   } catch (error) {
@@ -787,124 +857,14 @@ async function handleSaveFriendTag(): Promise<void> {
   }
 }
 
-async function handleRemoveBlacklist(): Promise<void> {
-  if (!userUuid.value || !selectedBlacklistRow.value || blacklistActionPending.value) {
-    return
-  }
-
-  const nickname =
-    getString(selectedBlacklistRow.value.payload, 'nickname') || selectedBlacklistRow.value.peerUuid
-  const confirmed = window.confirm(`确认将「${nickname}」移出黑名单吗？`)
-  if (!confirmed) {
-    return
-  }
-
-  blacklistActionPending.value = true
-  blacklistActionError.value = ''
-  try {
-    await blacklistStore.removeFromBlacklist(userUuid.value, selectedBlacklistRow.value.peerUuid)
-  } catch (error) {
-    blacklistActionError.value = resolveRelationErrorMessage('remove_blacklist', error)
-  } finally {
-    blacklistActionPending.value = false
-  }
-}
-
-async function handleReloadDevices(): Promise<void> {
-  deviceActionError.value = ''
-  try {
-    await deviceStore.loadDevices()
-  } catch (error) {
-    deviceActionError.value = normalizeErrorMessage(error)
-  }
-}
-
-async function handleProfileSave(payload: UpdateMyProfileRequest): Promise<void> {
-  if (!userUuid.value || profileSavePending.value) {
-    return
-  }
-
-  profileSavePending.value = true
-  profileSaveError.value = ''
-  try {
-    await userStore.updateProfile(userUuid.value, payload)
-  } catch (error) {
-    profileSaveError.value = normalizeErrorMessage(error)
-  } finally {
-    profileSavePending.value = false
-  }
-}
-
-async function handleRequestEmailCode(nextEmail: string): Promise<void> {
-  if (!nextEmail || sendingVerifyCode.value || codeCooldownSeconds.value > 0) {
-    return
-  }
-
-  clearSecurityFeedback()
-  sendingVerifyCode.value = true
-  try {
-    await sendVerifyCode({
-      email: nextEmail,
-      type: 4
-    })
-    securityMessage.value = '验证码已发送，请查收新邮箱。'
-    startCodeCooldown(60)
-  } catch (error) {
-    if (isSendTooFrequentError(error)) {
-      startCodeCooldown(60)
-    }
-    securityError.value = resolveSecurityErrorMessage('send_email_code', error)
-  } finally {
-    sendingVerifyCode.value = false
-  }
-}
-
-async function handleSubmitEmail(payload: { newEmail: string; verifyCode: string }): Promise<void> {
-  if (!userUuid.value || changingEmail.value) {
-    return
-  }
-
-  clearSecurityFeedback()
-  changingEmail.value = true
-  try {
-    await changeEmail(payload)
-    await userStore.syncFromServer(userUuid.value)
-    securityMessage.value = '邮箱已更新。'
-  } catch (error) {
-    securityError.value = resolveSecurityErrorMessage('change_email', error)
-  } finally {
-    changingEmail.value = false
-  }
-}
-
-async function handleSubmitPassword(payload: {
-  oldPassword: string
-  newPassword: string
-}): Promise<void> {
-  if (changingPassword.value) {
-    return
-  }
-
-  clearSecurityFeedback()
-  changingPassword.value = true
-  try {
-    await changePassword(payload)
-    securityMessage.value = '密码修改成功。'
-  } catch (error) {
-    securityError.value = resolveSecurityErrorMessage('change_password', error)
-  } finally {
-    changingPassword.value = false
-  }
-}
-
 async function resetAndNavigateLogin(): Promise<void> {
   userStore.reset()
   friendStore.reset()
+  presenceStore.reset()
   applyStore.reset()
   blacklistStore.reset()
   deviceStore.reset()
   contactActionError.value = ''
-  blacklistActionError.value = ''
   contactRemarkDraft.value = ''
   contactTagDraft.value = ''
   searchKeyword.value = ''
@@ -913,57 +873,10 @@ async function resetAndNavigateLogin(): Promise<void> {
   clearSearchFeedback()
   clearSentApplyFeedback()
   retryingSentApplyId.value = 0
-  stopCodeCooldown()
-  codeCooldownSeconds.value = 0
-  clearSecurityFeedback()
+  resetSettingsState()
   await sessionStore.clearState()
   appStore.setActiveNav('chat')
   await router.replace({ name: 'login' })
-}
-
-async function handleSubmitDelete(payload: { password: string; reason?: string }): Promise<void> {
-  if (deletingAccount.value) {
-    return
-  }
-
-  clearSecurityFeedback()
-  deletingAccount.value = true
-  try {
-    const response = await deleteAccount(payload)
-    securityMessage.value = `账号已注销，恢复截止 ${response.data.recoverDeadline || '-'}。正在退出登录...`
-    await authStore.signOut()
-    await resetAndNavigateLogin()
-  } catch (error) {
-    securityError.value = resolveSecurityErrorMessage('delete_account', error)
-  } finally {
-    deletingAccount.value = false
-  }
-}
-
-async function handleKickDevice(targetDeviceId: string): Promise<void> {
-  if (!targetDeviceId || deviceActionPendingId.value) {
-    return
-  }
-
-  if (session.value?.deviceId === targetDeviceId) {
-    deviceActionError.value = '当前设备不允许下线'
-    return
-  }
-
-  deviceActionPendingId.value = targetDeviceId
-  deviceActionError.value = ''
-  try {
-    await deviceStore.kickById(targetDeviceId)
-  } catch (error) {
-    deviceActionError.value = normalizeErrorMessage(error)
-  } finally {
-    deviceActionPendingId.value = ''
-  }
-}
-
-async function handleLogout(): Promise<void> {
-  await authStore.signOut()
-  await resetAndNavigateLogin()
 }
 
 onMounted(async () => {
@@ -996,7 +909,7 @@ onMounted(async () => {
 })
 
 onBeforeUnmount(() => {
-  stopCodeCooldown()
+  disposeSettingsActions()
 })
 </script>
 
@@ -1158,7 +1071,7 @@ onBeforeUnmount(() => {
           <UserSearchCard
             :keyword="searchKeyword"
             :reason="searchReasonDraft"
-            :results="searchResults"
+            :results="searchResultItems"
             :searching="searchingUsers"
             :sending-target-uuid="sendingApplyTarget"
             :existing-friend-ids="existingFriendIds"
@@ -1198,93 +1111,38 @@ onBeforeUnmount(() => {
         empty-text="暂无可展示信息"
       >
         <template #actions>
-          <div class="settings-actions">
-            <section v-if="selectedBlacklistRow" class="blacklist-action-card">
-              <h3>黑名单操作</h3>
-              <p>
-                当前选中用户：{{
-                  getString(selectedBlacklistRow.payload, 'nickname') ||
-                  selectedBlacklistRow.peerUuid
-                }}
-              </p>
-              <button
-                type="button"
-                class="action-btn action-btn--ghost"
-                :disabled="blacklistActionPending"
-                @click="handleRemoveBlacklist"
-              >
-                移出黑名单
-              </button>
-              <p v-if="blacklistActionError" class="apply-error">{{ blacklistActionError }}</p>
-            </section>
-
-            <ProfileEditorCard
-              :profile="profileEditorData"
-              :saving="profileSavePending"
-              :error-message="profileSaveError"
-              @clear-error="handleProfileInput"
-              @submit="handleProfileSave"
-            />
-
-            <SecurityCenterCard
-              :current-email="currentEmail"
-              :sending-code="sendingVerifyCode"
-              :code-cooldown-seconds="codeCooldownSeconds"
-              :saving-email="changingEmail"
-              :saving-password="changingPassword"
-              :deleting-account="deletingAccount"
-              :message="securityMessage"
-              :error-message="securityError"
-              @clear-feedback="clearSecurityFeedback"
-              @request-email-code="handleRequestEmailCode"
-              @submit-email="handleSubmitEmail"
-              @submit-password="handleSubmitPassword"
-              @submit-delete="handleSubmitDelete"
-            />
-
-            <section class="device-section">
-              <header class="device-header">
-                <h3>设备管理</h3>
-                <button
-                  type="button"
-                  class="action-btn action-btn--ghost"
-                  :disabled="deviceLoading || !!deviceActionPendingId"
-                  @click="handleReloadDevices"
-                >
-                  刷新
-                </button>
-              </header>
-
-              <p v-if="deviceLoading" class="device-empty">正在拉取设备列表...</p>
-              <ul v-else-if="settingDeviceItems.length > 0" class="device-list">
-                <li v-for="item in settingDeviceItems" :key="item.deviceId" class="device-item">
-                  <div class="device-meta">
-                    <strong>{{ item.deviceName || item.deviceId }}</strong>
-                    <p>{{ item.platform || '-' }} · {{ item.appVersion || '-' }}</p>
-                    <small>
-                      {{ getDeviceStatusLabel(item.status) }} · 最近活跃
-                      {{ item.lastSeenAt || '-' }}
-                    </small>
-                  </div>
-                  <div class="device-actions">
-                    <span v-if="item.isCurrentDevice" class="device-current">当前设备</span>
-                    <button
-                      v-else
-                      type="button"
-                      class="action-btn action-btn--danger"
-                      :disabled="deviceActionPendingId === item.deviceId"
-                      @click="handleKickDevice(item.deviceId)"
-                    >
-                      下线
-                    </button>
-                  </div>
-                </li>
-              </ul>
-              <p v-else class="device-empty">暂无设备记录</p>
-
-              <p v-if="deviceActionError" class="apply-error">{{ deviceActionError }}</p>
-            </section>
-          </div>
+          <SettingsActionsPanel
+            :has-selected-blacklist="!!selectedBlacklistRow"
+            :selected-blacklist-label="selectedBlacklistLabel"
+            :blacklist-action-pending="blacklistActionPending"
+            :blacklist-action-error="blacklistActionError"
+            :profile="profileEditorData"
+            :profile-save-pending="profileSavePending"
+            :profile-save-error="profileSaveError"
+            :current-email="currentEmail"
+            :sending-verify-code="sendingVerifyCode"
+            :code-cooldown-seconds="codeCooldownSeconds"
+            :changing-email="changingEmail"
+            :changing-password="changingPassword"
+            :deleting-account="deletingAccount"
+            :security-message="securityMessage"
+            :security-error="securityError"
+            :device-loading="deviceLoading"
+            :device-items="settingDeviceItems"
+            :current-device-id="session?.deviceId || ''"
+            :device-action-pending-id="deviceActionPendingId"
+            :device-action-error="deviceActionError"
+            @remove-blacklist="handleRemoveBlacklist"
+            @profile-clear-error="handleProfileInput"
+            @profile-submit="handleProfileSave"
+            @security-clear-feedback="clearSecurityFeedback"
+            @request-email-code="handleRequestEmailCode"
+            @submit-email="handleSubmitEmail"
+            @submit-password="handleSubmitPassword"
+            @submit-delete="handleSubmitDelete"
+            @reload-devices="handleReloadDevices"
+            @kick-device="handleKickDevice"
+          />
         </template>
       </DetailPane>
     </template>
@@ -1417,109 +1275,6 @@ onBeforeUnmount(() => {
 .apply-error {
   margin: 8px 0 0;
   color: var(--c-danger);
-  font-size: 12px;
-}
-
-.settings-actions {
-  display: grid;
-  gap: 12px;
-}
-
-.blacklist-action-card {
-  border: 1px solid var(--c-border);
-  border-radius: 14px;
-  background: #fff;
-  padding: 14px;
-  box-shadow: var(--shadow-1);
-}
-
-.blacklist-action-card h3 {
-  margin: 0;
-  font-size: 14px;
-  color: var(--c-text-main);
-}
-
-.blacklist-action-card p {
-  margin: 8px 0;
-  color: var(--c-text-sub);
-  font-size: 12px;
-}
-
-.device-section {
-  border: 1px solid var(--c-border);
-  border-radius: 14px;
-  background: #fff;
-  padding: 14px;
-  box-shadow: var(--shadow-1);
-}
-
-.device-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.device-header h3 {
-  margin: 0;
-  font-size: 14px;
-  color: var(--c-text-main);
-}
-
-.device-list {
-  display: grid;
-  gap: 8px;
-}
-
-.device-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--c-border);
-  border-radius: 10px;
-  background: #fafbfc;
-}
-
-.device-meta strong {
-  display: block;
-  color: var(--c-text-main);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.device-meta p {
-  margin: 4px 0 0;
-  color: var(--c-text-sub);
-  font-size: 12px;
-}
-
-.device-meta small {
-  display: block;
-  margin-top: 2px;
-  color: var(--c-text-muted);
-  font-size: 11px;
-}
-
-.device-actions {
-  flex-shrink: 0;
-}
-
-.device-current {
-  display: inline-grid;
-  place-items: center;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(7, 193, 96, 0.14);
-  color: var(--c-primary);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.device-empty {
-  margin: 0;
-  color: var(--c-text-muted);
   font-size: 12px;
 }
 </style>
