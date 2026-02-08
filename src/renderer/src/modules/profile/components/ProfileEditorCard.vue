@@ -71,6 +71,15 @@ const avatarFallback = computed(() => {
   const name = props.profile?.nickname?.trim() || props.profile?.uuid || ''
   return name ? name.slice(0, 1).toUpperCase() : '?'
 })
+const profileDisplayName = computed(() => props.profile?.nickname?.trim() || props.profile?.uuid || '-')
+const profileContactLine = computed(() => {
+  const email = props.profile?.email?.trim() || ''
+  const telephone = props.profile?.telephone?.trim() || ''
+  if (email && telephone) {
+    return `${email} · ${telephone}`
+  }
+  return email || telephone || '未绑定联系方式'
+})
 
 function triggerAvatarUpload(): void {
   if (!props.profile || props.avatarUploading) {
@@ -111,17 +120,17 @@ function handleSubmit(): void {
   <section class="profile-editor">
     <header class="editor-header">
       <h3>个人资料</h3>
-      <p>修改昵称、签名与基础信息，保存后将同步到服务端并回写本地缓存。</p>
+      <p>头像与资料会同步至服务端，当前卡片优先展示可读信息。</p>
     </header>
 
-    <section class="avatar-section">
+    <section class="profile-head">
       <div class="avatar-preview" aria-hidden="true">
         <img v-if="avatarUrl" :src="avatarUrl" alt="avatar" />
         <span v-else>{{ avatarFallback }}</span>
       </div>
-      <div class="avatar-meta">
-        <strong>头像</strong>
-        <small>仅支持 JPG/PNG，大小不超过 2MB。</small>
+      <div class="profile-main">
+        <h4>{{ profileDisplayName }}</h4>
+        <p>{{ profileContactLine }}</p>
       </div>
       <input
         ref="avatarInputRef"
@@ -132,7 +141,7 @@ function handleSubmit(): void {
       />
       <button
         type="button"
-        class="upload-btn"
+        class="action-btn action-btn--ghost"
         :disabled="!props.profile || props.avatarUploading"
         @click="triggerAvatarUpload"
       >
@@ -140,17 +149,20 @@ function handleSubmit(): void {
       </button>
     </section>
 
-    <div class="meta-grid">
-      <p>
-        <span>用户 UUID</span><strong>{{ props.profile?.uuid || '-' }}</strong>
-      </p>
-      <p>
-        <span>邮箱</span><strong>{{ props.profile?.email || '-' }}</strong>
-      </p>
-      <p>
-        <span>手机号</span><strong>{{ props.profile?.telephone || '-' }}</strong>
-      </p>
-    </div>
+    <dl class="meta-grid">
+      <div>
+        <dt>用户 UUID</dt>
+        <dd>{{ props.profile?.uuid || '-' }}</dd>
+      </div>
+      <div>
+        <dt>邮箱</dt>
+        <dd>{{ props.profile?.email || '-' }}</dd>
+      </div>
+      <div>
+        <dt>手机号</dt>
+        <dd>{{ props.profile?.telephone || '-' }}</dd>
+      </div>
+    </dl>
 
     <div class="form-grid">
       <label class="field">
@@ -189,7 +201,7 @@ function handleSubmit(): void {
     <div class="actions">
       <button
         type="button"
-        class="save-btn"
+        class="action-btn action-btn--primary"
         :disabled="!hasChanges || props.saving"
         @click="handleSubmit"
       >
@@ -201,8 +213,8 @@ function handleSubmit(): void {
 
 <style scoped>
 .profile-editor {
-  border: 1px solid var(--c-border);
-  border-radius: 14px;
+  border: 1px solid #e7ebef;
+  border-radius: 16px;
   background: #fff;
   padding: 14px;
   box-shadow: var(--shadow-1);
@@ -215,14 +227,14 @@ function handleSubmit(): void {
 }
 
 .editor-header p {
-  margin: 6px 0 0;
+  margin: 4px 0 0;
   color: var(--c-text-muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
-.avatar-section {
+.profile-head {
   margin-top: 10px;
-  border: 1px solid var(--c-border);
+  border: 1px solid #e7ebef;
   border-radius: 12px;
   padding: 10px;
   display: flex;
@@ -232,11 +244,11 @@ function handleSubmit(): void {
 }
 
 .avatar-preview {
-  width: 56px;
-  height: 56px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
-  border: 1px solid var(--c-border);
-  background: #eef1f4;
+  border: 1px solid #dce3ea;
+  background: #eef2f6;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -250,34 +262,36 @@ function handleSubmit(): void {
 }
 
 .avatar-preview span {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--c-text-sub);
 }
 
-.avatar-meta {
+.profile-main {
   flex: 1;
   min-width: 0;
-  display: grid;
-  gap: 4px;
 }
 
-.avatar-meta strong {
+.profile-main h4 {
+  margin: 0;
   color: var(--c-text-main);
-  font-size: 13px;
+  font-size: 16px;
 }
 
-.avatar-meta small {
+.profile-main p {
+  margin: 4px 0 0;
   color: var(--c-text-muted);
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .avatar-input {
   display: none;
 }
 
-.upload-btn {
+.action-btn {
   border: 1px solid var(--c-border);
   border-radius: 8px;
   background: #fff;
@@ -285,42 +299,56 @@ function handleSubmit(): void {
   padding: 7px 12px;
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.15s ease-out;
+  transition: all 0.2s ease-out;
   flex-shrink: 0;
+  font-weight: 600;
 }
 
-.upload-btn:hover:not(:disabled) {
-  border-color: #c7ced7;
-}
-
-.upload-btn:disabled {
+.action-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
+.action-btn--primary {
+  border-color: var(--c-primary);
+  background: var(--c-primary);
+  color: #fff;
+}
+
+.action-btn--primary:hover:not(:disabled) {
+  background: var(--c-primary-hover);
+  border-color: var(--c-primary-hover);
+}
+
+.action-btn--ghost:hover:not(:disabled) {
+  border-color: #c7ced7;
+}
+
 .meta-grid {
   margin-top: 10px;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
-.meta-grid p {
-  margin: 0;
+.meta-grid div {
+  min-width: 180px;
+  flex: 1;
   padding: 8px 10px;
-  border: 1px solid var(--c-border);
+  border: 1px solid #e7ebef;
   border-radius: 10px;
-  background: #fafbfc;
+  background: #f8fafd;
 }
 
-.meta-grid span {
+.meta-grid dt {
   display: block;
   color: var(--c-text-muted);
   font-size: 11px;
+  margin: 0;
 }
 
-.meta-grid strong {
-  display: block;
+.meta-grid dd {
+  margin: 0;
   margin-top: 4px;
   color: var(--c-text-main);
   font-size: 12px;
@@ -331,7 +359,7 @@ function handleSubmit(): void {
 .form-grid {
   margin-top: 10px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
   gap: 10px;
 }
 
@@ -349,7 +377,7 @@ function handleSubmit(): void {
 .field select,
 .field textarea {
   width: 100%;
-  border: 1px solid var(--c-border);
+  border: 1px solid var(--c-border-strong);
   border-radius: 8px;
   padding: 8px 10px;
   font-size: 13px;
@@ -378,26 +406,6 @@ function handleSubmit(): void {
   justify-content: flex-end;
 }
 
-.save-btn {
-  border: none;
-  border-radius: 8px;
-  background: var(--c-primary);
-  color: #fff;
-  padding: 8px 14px;
-  font-size: 13px;
-  cursor: pointer;
-  transition: background-color 0.15s ease-out;
-}
-
-.save-btn:hover:not(:disabled) {
-  background: var(--c-primary-hover);
-}
-
-.save-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .error {
   margin: 10px 0 0;
   color: var(--c-danger);
@@ -405,17 +413,17 @@ function handleSubmit(): void {
 }
 
 @media (max-width: 1199px) {
-  .avatar-section {
+  .profile-head {
     display: grid;
-    grid-template-columns: 56px 1fr;
+    grid-template-columns: 64px 1fr;
   }
 
-  .upload-btn {
+  .action-btn {
     grid-column: 1 / -1;
     justify-self: flex-start;
   }
 
-  .meta-grid {
+  .form-grid {
     grid-template-columns: 1fr;
   }
 }

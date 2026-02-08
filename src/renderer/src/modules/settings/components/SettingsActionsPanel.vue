@@ -248,12 +248,14 @@ function getLastSeenText(value: string): string {
 }
 
 .action-btn--danger {
-  color: #fff;
-  background: var(--c-danger);
+  color: #d44747;
+  background: rgba(245, 63, 63, 0.08);
+  border-color: rgba(245, 63, 63, 0.3);
 }
 
 .action-btn--danger:hover:not(:disabled) {
-  opacity: 0.9;
+  background: rgba(245, 63, 63, 0.14);
+  border-color: rgba(245, 63, 63, 0.4);
 }
 
 .action-btn--ghost {

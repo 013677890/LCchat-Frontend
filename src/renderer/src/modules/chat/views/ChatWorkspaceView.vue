@@ -1349,7 +1349,7 @@ onBeforeUnmount(() => {
   position: relative;
   width: 100%;
   height: 100%;
-  padding: 16px;
+  padding: 12px;
 }
 
 .workspace::before {
@@ -1368,10 +1368,10 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   border: 1px solid var(--c-border);
-  border-radius: 22px;
+  border-radius: 18px;
   overflow: hidden;
   display: flex;
-  background: rgba(255, 255, 255, 0.86);
+  background: rgba(255, 255, 255, 0.93);
   box-shadow: var(--shadow-2);
   backdrop-filter: blur(6px);
 }
@@ -1471,12 +1471,14 @@ onBeforeUnmount(() => {
 }
 
 .action-btn--danger {
-  color: #fff;
-  background: var(--c-danger);
+  color: #d44747;
+  background: rgba(245, 63, 63, 0.08);
+  border-color: rgba(245, 63, 63, 0.3);
 }
 
 .action-btn--danger:hover:not(:disabled) {
-  opacity: 0.9;
+  background: rgba(245, 63, 63, 0.14);
+  border-color: rgba(245, 63, 63, 0.4);
 }
 
 .action-btn--ghost {

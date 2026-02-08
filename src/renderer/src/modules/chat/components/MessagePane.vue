@@ -43,6 +43,12 @@ function handleSend(): void {
 
   emit('send', text)
 }
+
+const composerTools = [
+  { key: 'emoji', label: '表情', icon: ':-)' },
+  { key: 'image', label: '图片', icon: 'IMG' },
+  { key: 'file', label: '文件', icon: 'FILE' }
+]
 </script>
 
 <template>
@@ -50,7 +56,7 @@ function handleSend(): void {
     <header class="header">
       <div class="title-wrap">
         <h2>{{ props.title || '选择会话' }}</h2>
-        <p>消息实时写入本地缓存，重启后保留草稿与会话视图。</p>
+        <p>在线 · 草稿自动写入本地缓存</p>
       </div>
     </header>
 
@@ -72,10 +78,22 @@ function handleSend(): void {
     </main>
 
     <footer class="composer">
-      <textarea v-model="draftProxy" placeholder="输入消息，Enter 换行，点击发送提交" rows="4" />
+      <div class="tool-row">
+        <button v-for="tool in composerTools" :key="tool.key" type="button" :title="tool.label">
+          <span>{{ tool.icon }}</span>
+          <small>{{ tool.label }}</small>
+        </button>
+      </div>
+      <div class="textarea-wrap">
+        <textarea
+          v-model="draftProxy"
+          placeholder="输入消息，Enter 换行，点击发送提交"
+          rows="4"
+        />
+        <button type="button" class="send-btn" @click="handleSend">发送</button>
+      </div>
       <div class="composer-actions">
-        <span>草稿自动写入本地 SQLite</span>
-        <button type="button" @click="handleSend">发送</button>
+        <span>Enter 换行，点击发送按钮提交消息</span>
       </div>
     </footer>
   </section>
@@ -85,26 +103,23 @@ function handleSend(): void {
 .message-pane {
   flex: 1;
   min-width: 0;
-  background:
-    radial-gradient(500px 260px at 0% 0%, rgba(8, 182, 98, 0.08), transparent 70%),
-    linear-gradient(180deg, #f6faf8 0%, #f1f6f3 100%);
+  background: #f3f5f7;
   display: flex;
   flex-direction: column;
 }
 
 .header {
-  min-height: 76px;
+  min-height: 60px;
   border-bottom: 1px solid var(--c-border);
   display: flex;
   align-items: center;
-  padding: 14px 20px;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(4px);
+  padding: 8px 20px;
+  background: #fff;
 }
 
 .header h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
   color: var(--c-text-main);
 }
 
@@ -117,7 +132,7 @@ function handleSend(): void {
 .history {
   flex: 1;
   overflow-y: auto;
-  padding: 18px 20px;
+  padding: 16px 20px;
 }
 
 .message-list {
@@ -137,16 +152,17 @@ function handleSend(): void {
 
 .bubble {
   max-width: min(70%, 540px);
-  border-radius: 14px;
-  padding: 10px 13px;
+  border-radius: 2px 12px 12px 12px;
+  padding: 10px 14px;
   background: #fff;
-  border: 1px solid var(--c-border);
+  border: 1px solid #e8edf2;
   box-shadow: var(--shadow-1);
 }
 
 .bubble-row--self .bubble {
-  background: #dcf6e7;
-  border-color: rgba(8, 182, 98, 0.3);
+  background: #95ec69;
+  border-color: #84d85f;
+  border-radius: 12px 2px 12px 12px;
 }
 
 .bubble p {
@@ -172,18 +188,53 @@ function handleSend(): void {
 }
 
 .composer {
-  background: rgba(255, 255, 255, 0.92);
+  background: #eef2f5;
   border-top: 1px solid var(--c-border);
-  padding: 14px 18px;
-  backdrop-filter: blur(4px);
+  padding: 10px 18px 12px;
+}
+
+.tool-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.tool-row button {
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--c-text-muted);
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.tool-row button:hover {
+  color: var(--c-text-sub);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.tool-row span {
+  font-size: 14px;
+}
+
+.tool-row small {
+  font-size: 11px;
+}
+
+.textarea-wrap {
+  position: relative;
 }
 
 .composer textarea {
   width: 100%;
-  border: 1px solid var(--c-border-strong);
+  border: 1px solid #dbe1e8;
   border-radius: 12px;
   resize: none;
-  padding: 11px 12px;
+  padding: 11px 80px 11px 12px;
   font-size: 14px;
   font-family: inherit;
   outline: none;
@@ -192,36 +243,37 @@ function handleSend(): void {
 
 .composer textarea:focus {
   border-color: var(--c-primary);
-  box-shadow: 0 0 0 3px rgba(8, 182, 98, 0.12);
+  box-shadow: 0 0 0 3px rgba(7, 193, 96, 0.12);
+}
+
+.send-btn {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  border: none;
+  border-radius: 8px;
+  background: var(--c-primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.send-btn:hover {
+  background: var(--c-primary-hover);
 }
 
 .composer-actions {
-  margin-top: 10px;
+  margin-top: 8px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  justify-content: flex-start;
+  gap: 8px;
 }
 
 .composer-actions span {
   color: var(--c-text-muted);
-  font-size: 12px;
-}
-
-.composer-actions button {
-  border: none;
-  border-radius: 10px;
-  background: linear-gradient(180deg, #1ac36f 0%, #089a55 100%);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 600;
-  padding: 8px 18px;
-  cursor: pointer;
-  transition: background-color 0.15s ease-out;
-  box-shadow: var(--shadow-1);
-}
-
-.composer-actions button:hover {
-  background: linear-gradient(180deg, #17b867 0%, #078a4d 100%);
+  font-size: 11px;
 }
 </style>

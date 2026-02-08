@@ -58,75 +58,72 @@ function handleSelect(convId: string): void {
 
 <style scoped>
 .conversations {
-  width: 340px;
-  min-width: 340px;
+  width: 286px;
+  min-width: 286px;
   border-right: 1px solid var(--c-border);
-  background: linear-gradient(180deg, #f7fbf8 0%, #f0f7f3 100%);
+  background: #f7f8fa;
   display: flex;
   flex-direction: column;
 }
 
 .header {
-  min-height: 76px;
+  min-height: 60px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px 12px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--c-border);
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(4px);
+  background: #fff;
 }
 
 .header h1 {
-  font-size: 18px;
+  font-size: 16px;
   margin: 0;
   color: var(--c-text-main);
 }
 
 .header-desc {
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   color: var(--c-text-muted);
   font-size: 11px;
 }
 
 .hint {
-  font-size: 11px;
-  color: var(--c-text-sub);
-  border: 1px solid var(--c-border);
+  font-size: 10px;
+  color: var(--c-text-muted);
+  border: 1px solid #e4e8ed;
   border-radius: 999px;
-  padding: 3px 8px;
+  padding: 2px 7px;
   background: #fff;
 }
 
 .list {
   list-style: none;
   margin: 0;
-  padding: 10px 10px 12px;
+  padding: 6px 0;
   overflow-y: auto;
-  display: grid;
-  gap: 8px;
 }
 
 .item {
   width: 100%;
-  border: 1px solid var(--c-border);
-  border-radius: 12px;
-  background: #fff;
+  border: none;
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  background: transparent;
   text-align: left;
   cursor: pointer;
-  padding: 10px 11px;
-  transition: background-color 0.12s ease-out;
-  box-shadow: var(--shadow-1);
+  padding: 9px 12px;
+  min-height: 70px;
+  transition: background-color 0.2s ease-out;
 }
 
 .item:hover {
-  border-color: #bfd4c7;
-  background: #fafffd;
+  background: #f0f2f5;
 }
 
 .item--active {
-  border-color: rgba(8, 182, 98, 0.34);
-  background: #ebf9f1;
+  border-left-color: var(--c-primary);
+  background: #eaf7ef;
 }
 
 .item-head {
@@ -139,7 +136,8 @@ function handleSelect(convId: string): void {
 
 .item-head strong {
   color: var(--c-text-main);
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 600;
   line-height: 1.4;
 }
 
@@ -157,7 +155,7 @@ function handleSelect(convId: string): void {
 
 .item-body p {
   margin: 0;
-  color: var(--c-text-sub);
+  color: #8d96a3;
   font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -174,13 +172,13 @@ function handleSelect(convId: string): void {
   place-items: center;
   font-size: 11px;
   color: #fff;
-  background: linear-gradient(180deg, #1ac36f 0%, #089a55 100%);
+  background: #f53f3f;
 }
 
 .empty {
   margin: 0;
-  padding: 20px 16px;
+  padding: 20px 12px;
   color: var(--c-text-muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 </style>

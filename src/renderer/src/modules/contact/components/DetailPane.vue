@@ -22,18 +22,20 @@ const props = defineProps<{
     </header>
 
     <main class="body">
-      <div v-if="(props.lines || []).length > 0" class="detail-card">
-        <dl>
-          <template v-for="line in props.lines" :key="line.label">
-            <dt>{{ line.label }}</dt>
-            <dd>{{ line.value || '-' }}</dd>
-          </template>
-        </dl>
+      <div class="body-inner">
+        <div v-if="(props.lines || []).length > 0" class="detail-card">
+          <dl>
+            <template v-for="line in props.lines" :key="line.label">
+              <dt>{{ line.label }}</dt>
+              <dd>{{ line.value || '-' }}</dd>
+            </template>
+          </dl>
+        </div>
+        <div v-if="$slots.actions" class="actions">
+          <slot name="actions" />
+        </div>
+        <p v-else class="empty">{{ props.emptyText || '请选择一项查看详情' }}</p>
       </div>
-      <div v-if="$slots.actions" class="actions">
-        <slot name="actions" />
-      </div>
-      <p v-else class="empty">{{ props.emptyText || '请选择一项查看详情' }}</p>
     </main>
   </section>
 </template>
@@ -42,22 +44,19 @@ const props = defineProps<{
 .detail-pane {
   flex: 1;
   min-width: 0;
-  background:
-    radial-gradient(420px 220px at 0% 0%, rgba(8, 182, 98, 0.08), transparent 70%),
-    linear-gradient(180deg, #f6faf8 0%, #f1f6f3 100%);
+  background: #f5f6f8;
   display: flex;
   flex-direction: column;
 }
 
 .header {
-  min-height: 76px;
+  min-height: 60px;
   border-bottom: 1px solid var(--c-border);
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  padding: 14px 20px;
-  background: rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(4px);
+  padding: 8px 20px;
+  background: #fff;
   gap: 10px;
 }
 
@@ -68,25 +67,30 @@ const props = defineProps<{
 
 .header h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
   color: var(--c-text-main);
 }
 
 .header p {
   margin: 0;
   color: var(--c-text-muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .body {
   flex: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 18px;
+}
+
+.body-inner {
+  width: min(100%, 720px);
+  margin: 0 auto;
 }
 
 .detail-card {
   background: #fff;
-  border: 1px solid var(--c-border);
+  border: 1px solid #e7ebef;
   border-radius: 16px;
   padding: 16px;
   box-shadow: var(--shadow-1);
@@ -94,10 +98,10 @@ const props = defineProps<{
 
 .actions {
   margin-top: 14px;
-  border: 1px solid var(--c-border);
+  border: 1px solid #e7ebef;
   border-radius: 16px;
   padding: 14px;
-  background: rgba(255, 255, 255, 0.9);
+  background: #fff;
   box-shadow: var(--shadow-1);
 }
 
