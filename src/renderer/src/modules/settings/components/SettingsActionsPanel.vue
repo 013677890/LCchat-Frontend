@@ -84,7 +84,7 @@ function getLastSeenText(value: string): string {
 
 <template>
   <div class="settings-actions">
-    <section v-if="props.hasSelectedBlacklist" class="blacklist-action-card">
+    <section v-if="props.hasSelectedBlacklist" class="blacklist-action-card settings-card--full">
       <h3>黑名单操作</h3>
       <p>当前选中用户：{{ props.selectedBlacklistLabel }}</p>
       <button
@@ -98,89 +98,97 @@ function getLastSeenText(value: string): string {
       <p v-if="props.blacklistActionError" class="apply-error">{{ props.blacklistActionError }}</p>
     </section>
 
-    <ProfileEditorCard
-      :profile="props.profile"
-      :saving="props.profileSavePending"
-      :avatar-uploading="props.profileAvatarUploading"
-      :error-message="props.profileSaveError"
-      @clear-error="emit('profileClearError')"
-      @submit="emit('profileSubmit', $event)"
-      @upload-avatar="emit('profileUploadAvatar', $event)"
-    />
+    <div class="settings-grid">
+      <div class="settings-cell settings-cell--profile">
+        <ProfileEditorCard
+          :profile="props.profile"
+          :saving="props.profileSavePending"
+          :avatar-uploading="props.profileAvatarUploading"
+          :error-message="props.profileSaveError"
+          @clear-error="emit('profileClearError')"
+          @submit="emit('profileSubmit', $event)"
+          @upload-avatar="emit('profileUploadAvatar', $event)"
+        />
+      </div>
 
-    <ProfileQRCodeCard
-      :qr-code-url="props.qrCodeUrl"
-      :qr-code-token="props.qrCodeToken"
-      :expire-at="props.qrCodeExpireAt"
-      :loading="props.qrcodeLoading"
-      :parsing="props.qrcodeParsing"
-      :message="props.qrcodeMessage"
-      :error-message="props.qrcodeError"
-      @clear-feedback="emit('qrcodeClearFeedback')"
-      @refresh="emit('refreshQrCode')"
-      @parse="emit('parseQrCode', $event)"
-    />
+      <div class="settings-cell settings-cell--qrcode">
+        <ProfileQRCodeCard
+          :qr-code-url="props.qrCodeUrl"
+          :qr-code-token="props.qrCodeToken"
+          :expire-at="props.qrCodeExpireAt"
+          :loading="props.qrcodeLoading"
+          :parsing="props.qrcodeParsing"
+          :message="props.qrcodeMessage"
+          :error-message="props.qrcodeError"
+          @clear-feedback="emit('qrcodeClearFeedback')"
+          @refresh="emit('refreshQrCode')"
+          @parse="emit('parseQrCode', $event)"
+        />
+      </div>
 
-    <SecurityCenterCard
-      :current-email="props.currentEmail"
-      :sending-code="props.sendingVerifyCode"
-      :code-cooldown-seconds="props.codeCooldownSeconds"
-      :saving-email="props.changingEmail"
-      :saving-password="props.changingPassword"
-      :deleting-account="props.deletingAccount"
-      :message="props.securityMessage"
-      :error-message="props.securityError"
-      @clear-feedback="emit('securityClearFeedback')"
-      @request-email-code="emit('requestEmailCode', $event)"
-      @submit-email="emit('submitEmail', $event)"
-      @submit-password="emit('submitPassword', $event)"
-      @submit-delete="emit('submitDelete', $event)"
-    />
+      <div class="settings-cell settings-cell--security">
+        <SecurityCenterCard
+          :current-email="props.currentEmail"
+          :sending-code="props.sendingVerifyCode"
+          :code-cooldown-seconds="props.codeCooldownSeconds"
+          :saving-email="props.changingEmail"
+          :saving-password="props.changingPassword"
+          :deleting-account="props.deletingAccount"
+          :message="props.securityMessage"
+          :error-message="props.securityError"
+          @clear-feedback="emit('securityClearFeedback')"
+          @request-email-code="emit('requestEmailCode', $event)"
+          @submit-email="emit('submitEmail', $event)"
+          @submit-password="emit('submitPassword', $event)"
+          @submit-delete="emit('submitDelete', $event)"
+        />
+      </div>
 
-    <section class="device-section">
-      <header class="device-header">
-        <h3>设备管理</h3>
-        <button
-          type="button"
-          class="action-btn action-btn--ghost"
-          :disabled="props.deviceLoading || !!props.deviceActionPendingId"
-          @click="emit('reloadDevices')"
-        >
-          刷新
-        </button>
-      </header>
+      <section class="device-section settings-cell settings-cell--device">
+        <header class="device-header">
+          <h3>设备管理</h3>
+          <button
+            type="button"
+            class="action-btn action-btn--ghost"
+            :disabled="props.deviceLoading || !!props.deviceActionPendingId"
+            @click="emit('reloadDevices')"
+          >
+            刷新
+          </button>
+        </header>
 
-      <p v-if="props.deviceLoading" class="device-empty">正在拉取设备列表...</p>
-      <ul v-else-if="props.deviceItems.length > 0" class="device-list">
-        <li v-for="item in props.deviceItems" :key="item.deviceId" class="device-item">
-          <div class="device-meta">
-            <strong>{{ item.deviceName || item.deviceId }}</strong>
-            <p>{{ item.platform || '-' }} · {{ item.appVersion || '-' }}</p>
-            <small
-              >{{ getDeviceStatusLabel(item.status) }} · 最近活跃
-              {{ getLastSeenText(item.lastSeenAt) }}</small
-            >
-          </div>
-          <div class="device-actions">
-            <span v-if="item.deviceId === props.currentDeviceId" class="device-current"
-              >当前设备</span
-            >
-            <button
-              v-else
-              type="button"
-              class="action-btn action-btn--danger"
-              :disabled="props.deviceActionPendingId === item.deviceId"
-              @click="emit('kickDevice', item.deviceId)"
-            >
-              下线
-            </button>
-          </div>
-        </li>
-      </ul>
-      <p v-else class="device-empty">暂无设备记录</p>
+        <p v-if="props.deviceLoading" class="device-empty">正在拉取设备列表...</p>
+        <ul v-else-if="props.deviceItems.length > 0" class="device-list">
+          <li v-for="item in props.deviceItems" :key="item.deviceId" class="device-item">
+            <div class="device-meta">
+              <strong>{{ item.deviceName || item.deviceId }}</strong>
+              <p>{{ item.platform || '-' }} · {{ item.appVersion || '-' }}</p>
+              <small
+                >{{ getDeviceStatusLabel(item.status) }} · 最近活跃
+                {{ getLastSeenText(item.lastSeenAt) }}</small
+              >
+            </div>
+            <div class="device-actions">
+              <span v-if="item.deviceId === props.currentDeviceId" class="device-current"
+                >当前设备</span
+              >
+              <button
+                v-else
+                type="button"
+                class="action-btn action-btn--danger"
+                :disabled="props.deviceActionPendingId === item.deviceId"
+                @click="emit('kickDevice', item.deviceId)"
+              >
+                下线
+              </button>
+            </div>
+          </li>
+        </ul>
+        <p v-else class="device-empty">暂无设备记录</p>
 
-      <p v-if="props.deviceActionError" class="apply-error">{{ props.deviceActionError }}</p>
-    </section>
+        <p v-if="props.deviceActionError" class="apply-error">{{ props.deviceActionError }}</p>
+      </section>
+    </div>
   </div>
 </template>
 
@@ -190,9 +198,24 @@ function getLastSeenText(value: string): string {
   gap: 12px;
 }
 
+.settings-card--full {
+  grid-column: 1 / -1;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.settings-cell--security,
+.settings-cell--device {
+  grid-column: 1 / -1;
+}
+
 .blacklist-action-card {
   border: 1px solid var(--c-border);
-  border-radius: 14px;
+  border-radius: 16px;
   background: #fff;
   padding: 14px;
   box-shadow: var(--shadow-1);
@@ -251,7 +274,7 @@ function getLastSeenText(value: string): string {
 
 .device-section {
   border: 1px solid var(--c-border);
-  border-radius: 14px;
+  border-radius: 16px;
   background: #fff;
   padding: 14px;
   box-shadow: var(--shadow-1);
@@ -282,8 +305,8 @@ function getLastSeenText(value: string): string {
   gap: 12px;
   padding: 10px 12px;
   border: 1px solid var(--c-border);
-  border-radius: 10px;
-  background: #fafbfc;
+  border-radius: 12px;
+  background: var(--c-bg-panel-soft);
 }
 
 .device-meta strong {
@@ -325,5 +348,16 @@ function getLastSeenText(value: string): string {
   margin: 0;
   color: var(--c-text-muted);
   font-size: 12px;
+}
+
+@media (max-width: 1399px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-cell--security,
+  .settings-cell--device {
+    grid-column: auto;
+  }
 }
 </style>

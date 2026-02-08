@@ -48,7 +48,10 @@ function handleSend(): void {
 <template>
   <section class="message-pane">
     <header class="header">
-      <h2>{{ props.title || '选择会话' }}</h2>
+      <div class="title-wrap">
+        <h2>{{ props.title || '选择会话' }}</h2>
+        <p>消息实时写入本地缓存，重启后保留草稿与会话视图。</p>
+      </div>
     </header>
 
     <main class="history">
@@ -82,24 +85,33 @@ function handleSend(): void {
 .message-pane {
   flex: 1;
   min-width: 0;
-  background: linear-gradient(180deg, #f7f8f9 0%, #f2f3f5 100%);
+  background:
+    radial-gradient(500px 260px at 0% 0%, rgba(8, 182, 98, 0.08), transparent 70%),
+    linear-gradient(180deg, #f6faf8 0%, #f1f6f3 100%);
   display: flex;
   flex-direction: column;
 }
 
 .header {
-  height: 64px;
+  min-height: 76px;
   border-bottom: 1px solid var(--c-border);
   display: flex;
   align-items: center;
-  padding: 0 20px;
-  background: #fff;
+  padding: 14px 20px;
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(4px);
 }
 
 .header h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 17px;
   color: var(--c-text-main);
+}
+
+.title-wrap p {
+  margin: 5px 0 0;
+  font-size: 11px;
+  color: var(--c-text-muted);
 }
 
 .history {
@@ -125,14 +137,16 @@ function handleSend(): void {
 
 .bubble {
   max-width: min(70%, 540px);
-  border-radius: 12px;
-  padding: 10px 12px;
+  border-radius: 14px;
+  padding: 10px 13px;
   background: #fff;
+  border: 1px solid var(--c-border);
   box-shadow: var(--shadow-1);
 }
 
 .bubble-row--self .bubble {
-  background: #d5f4e1;
+  background: #dcf6e7;
+  border-color: rgba(8, 182, 98, 0.3);
 }
 
 .bubble p {
@@ -158,17 +172,18 @@ function handleSend(): void {
 }
 
 .composer {
-  background: #fff;
+  background: rgba(255, 255, 255, 0.92);
   border-top: 1px solid var(--c-border);
   padding: 14px 18px;
+  backdrop-filter: blur(4px);
 }
 
 .composer textarea {
   width: 100%;
-  border: 1px solid var(--c-border);
-  border-radius: 10px;
+  border: 1px solid var(--c-border-strong);
+  border-radius: 12px;
   resize: none;
-  padding: 10px 12px;
+  padding: 11px 12px;
   font-size: 14px;
   font-family: inherit;
   outline: none;
@@ -177,6 +192,7 @@ function handleSend(): void {
 
 .composer textarea:focus {
   border-color: var(--c-primary);
+  box-shadow: 0 0 0 3px rgba(8, 182, 98, 0.12);
 }
 
 .composer-actions {
@@ -194,17 +210,18 @@ function handleSend(): void {
 
 .composer-actions button {
   border: none;
-  border-radius: 8px;
-  background: var(--c-primary);
+  border-radius: 10px;
+  background: linear-gradient(180deg, #1ac36f 0%, #089a55 100%);
   color: #fff;
   font-size: 13px;
   font-weight: 600;
-  padding: 8px 16px;
+  padding: 8px 18px;
   cursor: pointer;
   transition: background-color 0.15s ease-out;
+  box-shadow: var(--shadow-1);
 }
 
 .composer-actions button:hover {
-  background: var(--c-primary-hover);
+  background: linear-gradient(180deg, #17b867 0%, #078a4d 100%);
 }
 </style>

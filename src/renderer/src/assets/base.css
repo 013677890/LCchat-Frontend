@@ -1,27 +1,31 @@
 :root {
-  --c-primary: #07c160;
-  --c-primary-hover: #06ad56;
-  --c-bg-app: #f5f6f7;
+  --c-primary: #08b662;
+  --c-primary-hover: #069955;
+  --c-primary-soft: rgba(8, 182, 98, 0.14);
+  --c-bg-app: #eaf2ee;
   --c-bg-panel: #ffffff;
-  --c-bg-sidebar: #edeff2;
-  --c-border: #e5e7eb;
-  --c-text-main: #1f2329;
-  --c-text-sub: #4e5969;
-  --c-text-muted: #86909c;
+  --c-bg-panel-soft: #f8fbfa;
+  --c-bg-sidebar: #f4f8f6;
+  --c-border: #d8e2dc;
+  --c-border-strong: #c8d5ce;
+  --c-text-main: #14231b;
+  --c-text-sub: #3f5248;
+  --c-text-muted: #708278;
   --c-danger: #f53f3f;
-  --c-warning: #ff7d00;
-  --c-success: #00b42a;
+  --c-warning: #ff8f1f;
+  --c-success: #2d9f52;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
   --space-5: 20px;
   --space-6: 24px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-2: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --shadow-1: 0 2px 8px rgba(24, 45, 32, 0.08);
+  --shadow-2: 0 12px 30px rgba(24, 45, 32, 0.12);
 }
 
 *,
@@ -40,7 +44,10 @@ body,
 
 body {
   min-height: 100vh;
-  background: var(--c-bg-app);
+  background:
+    radial-gradient(1200px 500px at 15% -10%, rgba(79, 199, 137, 0.16), transparent 55%),
+    radial-gradient(900px 420px at 90% 0%, rgba(45, 159, 82, 0.12), transparent 60%),
+    linear-gradient(180deg, #edf4f1 0%, #e7efea 100%);
   color: var(--c-text-main);
   font-family:
     'PingFang SC',
@@ -57,6 +64,17 @@ button,
 input,
 textarea {
   font-family: inherit;
+}
+
+button,
+input,
+textarea,
+select {
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 ul {

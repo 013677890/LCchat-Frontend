@@ -25,7 +25,10 @@ function handleSelect(convId: string): void {
 <template>
   <section class="conversations">
     <header class="header">
-      <h1>会话</h1>
+      <div>
+        <h1>会话</h1>
+        <p class="header-desc">最近消息与未读提醒</p>
+      </div>
       <span class="hint">{{ props.items.length }} 条</span>
     </header>
 
@@ -55,57 +58,75 @@ function handleSelect(convId: string): void {
 
 <style scoped>
 .conversations {
-  width: 320px;
-  min-width: 320px;
+  width: 340px;
+  min-width: 340px;
   border-right: 1px solid var(--c-border);
-  background: var(--c-bg-panel);
+  background: linear-gradient(180deg, #f7fbf8 0%, #f0f7f3 100%);
   display: flex;
   flex-direction: column;
 }
 
 .header {
-  height: 64px;
+  min-height: 76px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 14px 16px 12px;
   border-bottom: 1px solid var(--c-border);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(4px);
 }
 
 .header h1 {
   font-size: 18px;
   margin: 0;
+  color: var(--c-text-main);
+}
+
+.header-desc {
+  margin: 4px 0 0;
+  color: var(--c-text-muted);
+  font-size: 11px;
 }
 
 .hint {
-  font-size: 12px;
-  color: var(--c-text-muted);
+  font-size: 11px;
+  color: var(--c-text-sub);
+  border: 1px solid var(--c-border);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: #fff;
 }
 
 .list {
   list-style: none;
   margin: 0;
-  padding: 8px 0;
+  padding: 10px 10px 12px;
   overflow-y: auto;
+  display: grid;
+  gap: 8px;
 }
 
 .item {
   width: 100%;
-  border: none;
-  background: transparent;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: #fff;
   text-align: left;
   cursor: pointer;
-  padding: 10px 14px;
-  border-bottom: 1px solid rgba(229, 231, 235, 0.5);
+  padding: 10px 11px;
   transition: background-color 0.12s ease-out;
+  box-shadow: var(--shadow-1);
 }
 
 .item:hover {
-  background: #f8fafc;
+  border-color: #bfd4c7;
+  background: #fafffd;
 }
 
 .item--active {
-  background: #eefaf2;
+  border-color: rgba(8, 182, 98, 0.34);
+  background: #ebf9f1;
 }
 
 .item-head {
@@ -124,7 +145,7 @@ function handleSelect(convId: string): void {
 
 .item-head span {
   color: var(--c-text-muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .item-body {
@@ -137,7 +158,7 @@ function handleSelect(convId: string): void {
 .item-body p {
   margin: 0;
   color: var(--c-text-sub);
-  font-size: 13px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -153,7 +174,7 @@ function handleSelect(convId: string): void {
   place-items: center;
   font-size: 11px;
   color: #fff;
-  background: var(--c-primary);
+  background: linear-gradient(180deg, #1ac36f 0%, #089a55 100%);
 }
 
 .empty {

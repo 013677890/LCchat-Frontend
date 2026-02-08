@@ -1075,47 +1075,48 @@ onBeforeUnmount(() => {
 <template>
   <div class="workspace">
     <p v-if="!localDBAvailable" class="degrade-banner">本地缓存不可用，已自动降级为内存模式。</p>
-    <SidebarNav
-      :active-nav="activeNav"
-      :user-label="userLabel"
-      :discover-badge="unreadApplyCount"
-      @select="handleNavChange"
-      @logout="handleLogout"
-    />
+    <div class="workspace-shell">
+      <SidebarNav
+        :active-nav="activeNav"
+        :user-label="userLabel"
+        :discover-badge="unreadApplyCount"
+        @select="handleNavChange"
+        @logout="handleLogout"
+      />
 
-    <template v-if="activeNav === 'chat'">
-      <ConversationPane
-        :items="conversationItems"
-        :active-conv-id="activeConvId"
-        :loading="loading"
-        @select="handleConversationSelect"
-      />
-      <MessagePane
-        :title="activeConversationTitle"
-        :messages="activeMessages"
-        :draft="activeDraft"
-        @update:draft="handleDraftChange"
-        @send="handleSend"
-      />
-    </template>
+      <template v-if="activeNav === 'chat'">
+        <ConversationPane
+          :items="conversationItems"
+          :active-conv-id="activeConvId"
+          :loading="loading"
+          @select="handleConversationSelect"
+        />
+        <MessagePane
+          :title="activeConversationTitle"
+          :messages="activeMessages"
+          :draft="activeDraft"
+          @update:draft="handleDraftChange"
+          @send="handleSend"
+        />
+      </template>
 
-    <template v-else-if="activeNav === 'contacts'">
-      <ListPane
-        title="通讯录"
-        :hint="friendListHint"
-        :items="friendPaneItems"
-        :groups="friendPaneGroups"
-        :selected-id="selectedFriendId"
-        :loading="false"
-        empty-text="暂无好友"
-        @select="handleFriendSelect"
-      />
-      <DetailPane
-        title="联系人详情"
-        description="好友信息来自本地缓存，在线同步后自动更新。"
-        :lines="contactDetailLines"
-        empty-text="请选择一位好友查看详情"
-      >
+      <template v-else-if="activeNav === 'contacts'">
+        <ListPane
+          title="通讯录"
+          :hint="friendListHint"
+          :items="friendPaneItems"
+          :groups="friendPaneGroups"
+          :selected-id="selectedFriendId"
+          :loading="false"
+          empty-text="暂无好友"
+          @select="handleFriendSelect"
+        />
+        <DetailPane
+          title="联系人详情"
+          description="好友信息来自本地缓存，在线同步后自动更新。"
+          :lines="contactDetailLines"
+          empty-text="请选择一位好友查看详情"
+        >
         <template #actions>
           <div v-if="selectedFriendRow" class="contact-actions-wrap">
             <div class="contact-actions">
@@ -1183,24 +1184,24 @@ onBeforeUnmount(() => {
           </div>
           <p v-if="contactActionError" class="apply-error">{{ contactActionError }}</p>
         </template>
-      </DetailPane>
-    </template>
+        </DetailPane>
+      </template>
 
-    <template v-else-if="activeNav === 'discover'">
-      <ListPane
-        title="好友申请"
-        :items="applyPaneItems"
-        :selected-id="selectedApplyId"
-        :loading="false"
-        empty-text="暂无好友申请"
-        @select="handleApplySelect"
-      />
-      <DetailPane
-        title="申请详情"
-        description="申请状态与已读状态以服务端返回为准。"
-        :lines="applyDetailLines"
-        empty-text="请选择一条申请查看详情"
-      >
+      <template v-else-if="activeNav === 'discover'">
+        <ListPane
+          title="好友申请"
+          :items="applyPaneItems"
+          :selected-id="selectedApplyId"
+          :loading="false"
+          empty-text="暂无好友申请"
+          @select="handleApplySelect"
+        />
+        <DetailPane
+          title="申请详情"
+          description="申请状态与已读状态以服务端返回为准。"
+          :lines="applyDetailLines"
+          empty-text="请选择一条申请查看详情"
+        >
         <template #actions>
           <div v-if="selectedApplyRow" class="apply-actions">
             <button
@@ -1273,24 +1274,24 @@ onBeforeUnmount(() => {
             @retry="handleRetrySentApply"
           />
         </template>
-      </DetailPane>
-    </template>
+        </DetailPane>
+      </template>
 
-    <template v-else>
-      <ListPane
-        title="黑名单"
-        :items="blacklistPaneItems"
-        :selected-id="selectedBlacklistId"
-        :loading="false"
-        empty-text="黑名单为空"
-        @select="handleBlacklistSelect"
-      />
-      <DetailPane
-        :title="settingsDetailTitle"
-        description="账户信息与隐私设置将在后续版本扩展。"
-        :lines="settingsDetailLines"
-        empty-text="暂无可展示信息"
-      >
+      <template v-else>
+        <ListPane
+          title="黑名单"
+          :items="blacklistPaneItems"
+          :selected-id="selectedBlacklistId"
+          :loading="false"
+          empty-text="黑名单为空"
+          @select="handleBlacklistSelect"
+        />
+        <DetailPane
+          :title="settingsDetailTitle"
+          description="账户信息与隐私设置将在后续版本扩展。"
+          :lines="settingsDetailLines"
+          empty-text="暂无可展示信息"
+        >
         <template #actions>
           <SettingsActionsPanel
             :has-selected-blacklist="!!selectedBlacklistRow"
@@ -1337,8 +1338,9 @@ onBeforeUnmount(() => {
             @kick-device="handleKickDevice"
           />
         </template>
-      </DetailPane>
-    </template>
+        </DetailPane>
+      </template>
+    </div>
   </div>
 </template>
 
@@ -1346,19 +1348,41 @@ onBeforeUnmount(() => {
 .workspace {
   position: relative;
   width: 100%;
-  height: 100vh;
-  min-height: 760px;
-  min-width: 1200px;
+  height: 100%;
+  padding: 16px;
+}
+
+.workspace::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 360px at 8% 0%, rgba(8, 182, 98, 0.1), transparent 62%),
+    radial-gradient(760px 340px at 100% 0%, rgba(45, 159, 82, 0.09), transparent 65%);
+}
+
+.workspace-shell {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--c-border);
+  border-radius: 22px;
+  overflow: hidden;
   display: flex;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: var(--shadow-2);
+  backdrop-filter: blur(6px);
 }
 
 .degrade-banner {
   position: absolute;
-  top: 8px;
+  top: 10px;
   left: 50%;
   transform: translateX(-50%);
   margin: 0;
-  z-index: 10;
+  z-index: 12;
   background: rgba(255, 125, 0, 0.16);
   border: 1px solid rgba(255, 125, 0, 0.35);
   color: #7b4a00;
@@ -1368,8 +1392,8 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 1199px) {
-  .workspace {
-    min-width: 1024px;
+  .workspace-shell {
+    border-radius: 16px;
   }
 }
 
@@ -1392,9 +1416,9 @@ onBeforeUnmount(() => {
 
 .contact-edit-card {
   border: 1px solid var(--c-border);
-  border-radius: 10px;
-  padding: 10px;
-  background: #fff;
+  border-radius: 12px;
+  padding: 12px;
+  background: var(--c-bg-panel-soft);
   display: grid;
   gap: 8px;
 }
@@ -1411,7 +1435,7 @@ onBeforeUnmount(() => {
 
 .contact-field input {
   width: 100%;
-  border: 1px solid var(--c-border);
+  border: 1px solid var(--c-border-strong);
   border-radius: 8px;
   padding: 7px 10px;
   font-size: 13px;

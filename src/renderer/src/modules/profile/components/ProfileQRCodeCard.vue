@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { buildQRCodeDataUrl } from '../../../shared/utils/qr-renderer'
 
 const props = defineProps<{
   qrCodeUrl: string
@@ -21,11 +22,21 @@ const parseInput = ref('')
 const copyMessage = ref('')
 const copyError = ref('')
 const exportPending = ref(false)
-
-function buildExportUrl(content: string): string {
-  const payload = encodeURIComponent(content)
-  return `https://api.qrserver.com/v1/create-qr-code/?size=640x640&margin=16&format=png&data=${payload}`
-}
+const qrImageUrl = computed(() => {
+  if (!props.qrCodeUrl) {
+    return ''
+  }
+  try {
+    return buildQRCodeDataUrl(props.qrCodeUrl, {
+      size: 260,
+      margin: 3,
+      dark: '#111111',
+      light: '#ffffff'
+    })
+  } catch {
+    return ''
+  }
+})
 
 const expireText = computed(() => {
   if (!props.expireAt) {
@@ -104,7 +115,7 @@ async function copyQRCodeUrl(): Promise<void> {
 }
 
 async function exportQRCodeImage(): Promise<void> {
-  if (!props.qrCodeUrl || exportPending.value) {
+  if (!qrImageUrl.value || exportPending.value) {
     return
   }
 
@@ -112,8 +123,7 @@ async function exportQRCodeImage(): Promise<void> {
   clearLocalCopyFeedback()
   exportPending.value = true
   try {
-    const exportUrl = buildExportUrl(props.qrCodeUrl)
-    const response = await fetch(exportUrl)
+    const response = await fetch(qrImageUrl.value)
     if (!response.ok) {
       throw new Error(`导出失败（${response.status}）`)
     }
@@ -152,6 +162,14 @@ async function exportQRCodeImage(): Promise<void> {
 
     <p class="hint">可复制链接给其他用户，或粘贴二维码链接/Token 进行解析。</p>
 
+    <section class="preview-wrap" aria-label="qrcode-preview">
+      <div class="preview-box">
+        <img v-if="qrImageUrl" :src="qrImageUrl" alt="我的二维码" />
+        <p v-else class="preview-empty">暂无二维码，点击“刷新二维码”获取。</p>
+      </div>
+      <p class="preview-caption">二维码由前端本地生成，可直接导出图片分享。</p>
+    </section>
+
     <div class="qrcode-url-wrap">
       <label>二维码链接</label>
       <div class="url-row">
@@ -168,7 +186,7 @@ async function exportQRCodeImage(): Promise<void> {
           <button
             type="button"
             class="action-btn action-btn--ghost"
-            :disabled="!props.qrCodeUrl || exportPending"
+            :disabled="!qrImageUrl || exportPending"
             @click="exportQRCodeImage"
           >
             {{ exportPending ? '导出中...' : '导出图片' }}
@@ -241,6 +259,48 @@ async function exportQRCodeImage(): Promise<void> {
   margin: 8px 0 0;
   color: var(--c-text-muted);
   font-size: 12px;
+}
+
+.preview-wrap {
+  margin-top: 10px;
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f8faf9 0%, #f1f4f3 100%);
+  padding: 10px;
+}
+
+.preview-box {
+  width: min(100%, 260px);
+  aspect-ratio: 1;
+  margin: 0 auto;
+  border-radius: 10px;
+  background: #fff;
+  border: 1px solid #d9dee6;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+}
+
+.preview-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.preview-empty {
+  margin: 0;
+  padding: 0 14px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--c-text-muted);
+  text-align: center;
+}
+
+.preview-caption {
+  margin: 8px 0 0;
+  color: var(--c-text-sub);
+  font-size: 11px;
+  text-align: center;
 }
 
 .qrcode-url-wrap {
