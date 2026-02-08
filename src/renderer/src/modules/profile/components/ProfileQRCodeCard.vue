@@ -20,6 +20,12 @@ const emit = defineEmits<{
 const parseInput = ref('')
 const copyMessage = ref('')
 const copyError = ref('')
+const exportPending = ref(false)
+
+function buildExportUrl(content: string): string {
+  const payload = encodeURIComponent(content)
+  return `https://api.qrserver.com/v1/create-qr-code/?size=640x640&margin=16&format=png&data=${payload}`
+}
 
 const expireText = computed(() => {
   if (!props.expireAt) {
@@ -96,6 +102,38 @@ async function copyQRCodeUrl(): Promise<void> {
     copyError.value = error instanceof Error ? error.message : '复制失败，请手动复制。'
   }
 }
+
+async function exportQRCodeImage(): Promise<void> {
+  if (!props.qrCodeUrl || exportPending.value) {
+    return
+  }
+
+  emit('clearFeedback')
+  clearLocalCopyFeedback()
+  exportPending.value = true
+  try {
+    const exportUrl = buildExportUrl(props.qrCodeUrl)
+    const response = await fetch(exportUrl)
+    if (!response.ok) {
+      throw new Error(`导出失败（${response.status}）`)
+    }
+    const blob = await response.blob()
+    const objectUrl = URL.createObjectURL(blob)
+
+    const link = document.createElement('a')
+    link.href = objectUrl
+    link.download = `lcchat-qrcode-${Date.now()}.png`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(objectUrl)
+    copyMessage.value = '二维码图片已导出。'
+  } catch (error) {
+    copyError.value = error instanceof Error ? error.message : '导出失败，请重试。'
+  } finally {
+    exportPending.value = false
+  }
+}
 </script>
 
 <template>
@@ -118,14 +156,24 @@ async function copyQRCodeUrl(): Promise<void> {
       <label>二维码链接</label>
       <div class="url-row">
         <input :value="props.qrCodeUrl || '-'" readonly />
-        <button
-          type="button"
-          class="action-btn action-btn--ghost"
-          :disabled="!props.qrCodeUrl"
-          @click="copyQRCodeUrl"
-        >
-          复制
-        </button>
+        <div class="url-actions">
+          <button
+            type="button"
+            class="action-btn action-btn--ghost"
+            :disabled="!props.qrCodeUrl"
+            @click="copyQRCodeUrl"
+          >
+            复制
+          </button>
+          <button
+            type="button"
+            class="action-btn action-btn--ghost"
+            :disabled="!props.qrCodeUrl || exportPending"
+            @click="exportQRCodeImage"
+          >
+            {{ exportPending ? '导出中...' : '导出图片' }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -211,6 +259,12 @@ async function copyQRCodeUrl(): Promise<void> {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
+}
+
+.url-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .url-row input {
@@ -315,6 +369,11 @@ async function copyQRCodeUrl(): Promise<void> {
 
   .url-row {
     grid-template-columns: 1fr;
+  }
+
+  .url-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }
 </style>

@@ -9,6 +9,7 @@ import {
   uploadMyAvatar
 } from '../modules/profile/api'
 import type { UpdateMyProfileRequest, UserProfileDTO } from '../shared/types/user'
+import { resolveAssetUrl } from '../shared/utils/asset-url'
 import { extractQRCodeToken } from '../shared/utils/qrcode'
 
 export interface QRCodeState {
@@ -17,13 +18,25 @@ export interface QRCodeState {
   expireAt: string
 }
 
+function normalizeProfilePayloadAvatar(payload: JsonObject): JsonObject {
+  const rawAvatar = typeof payload.avatar === 'string' ? payload.avatar : ''
+  const normalizedAvatar = resolveAssetUrl(rawAvatar)
+  if (normalizedAvatar === rawAvatar) {
+    return payload
+  }
+  return {
+    ...payload,
+    avatar: normalizedAvatar
+  }
+}
+
 function toProfilePayload(userUuid: string, userInfo: UserProfileDTO): JsonObject {
   return {
     uuid: typeof userInfo.uuid === 'string' ? userInfo.uuid : userUuid,
     nickname: typeof userInfo.nickname === 'string' ? userInfo.nickname : '',
     telephone: typeof userInfo.telephone === 'string' ? userInfo.telephone : '',
     email: typeof userInfo.email === 'string' ? userInfo.email : '',
-    avatar: typeof userInfo.avatar === 'string' ? userInfo.avatar : '',
+    avatar: resolveAssetUrl(typeof userInfo.avatar === 'string' ? userInfo.avatar : ''),
     gender: typeof userInfo.gender === 'number' ? userInfo.gender : 0,
     signature: typeof userInfo.signature === 'string' ? userInfo.signature : '',
     birthday: typeof userInfo.birthday === 'string' ? userInfo.birthday : '',
@@ -69,7 +82,25 @@ export const useUserStore = defineStore('user', () => {
     }
 
     try {
-      profile.value = await window.api.localdb.profile.get(userUuid)
+      const localProfile = await window.api.localdb.profile.get(userUuid)
+      if (!localProfile) {
+        profile.value = null
+        return
+      }
+
+      const normalizedPayload = normalizeProfilePayloadAvatar(localProfile.payload)
+      const normalizedProfile =
+        normalizedPayload === localProfile.payload
+          ? localProfile
+          : {
+              ...localProfile,
+              payload: normalizedPayload
+            }
+
+      profile.value = normalizedProfile
+      if (normalizedProfile !== localProfile) {
+        await window.api.localdb.profile.upsert(normalizedProfile)
+      }
     } catch (error) {
       console.warn('load profile from localdb failed', error)
       profile.value = null
@@ -136,8 +167,9 @@ export const useUserStore = defineStore('user', () => {
     }
 
     const response = await uploadMyAvatar(file)
-    const avatarUrl =
-      typeof response.data.avatarUrl === 'string' ? response.data.avatarUrl.trim() : ''
+    const avatarUrl = resolveAssetUrl(
+      typeof response.data.avatarUrl === 'string' ? response.data.avatarUrl : ''
+    )
     if (!avatarUrl) {
       return
     }

@@ -10,17 +10,33 @@ import {
   type SyncFriendChangeDTO
 } from '../modules/contact/api'
 import type { FriendDTO } from '../shared/types/friend'
+import { resolveAssetUrl } from '../shared/utils/asset-url'
 
 interface FriendTagSuggestion {
   tagName: string
   count: number
 }
 
+function normalizeFriendRowAvatar(row: FriendRow): FriendRow {
+  const rawAvatar = typeof row.payload.avatar === 'string' ? row.payload.avatar : ''
+  const normalizedAvatar = resolveAssetUrl(rawAvatar)
+  if (normalizedAvatar === rawAvatar) {
+    return row
+  }
+  return {
+    ...row,
+    payload: {
+      ...row.payload,
+      avatar: normalizedAvatar
+    }
+  }
+}
+
 function buildFriendPayload(item: FriendDTO): JsonObject {
   return {
     uuid: item.uuid ?? '',
     nickname: item.nickname ?? '',
-    avatar: item.avatar ?? '',
+    avatar: resolveAssetUrl(item.avatar ?? ''),
     gender: typeof item.gender === 'number' ? item.gender : 0,
     signature: item.signature ?? '',
     remark: item.remark ?? '',
@@ -101,7 +117,8 @@ export const useFriendStore = defineStore('friend', () => {
     }
 
     try {
-      friends.value = await window.api.localdb.friends.getList(userUuid)
+      const localRows = await window.api.localdb.friends.getList(userUuid)
+      friends.value = localRows.map(normalizeFriendRowAvatar)
       tagSuggestions.value = buildTagSuggestions(friends.value)
       version.value = getLocalVersion(friends.value)
     } catch (error) {

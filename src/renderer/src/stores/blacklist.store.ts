@@ -2,6 +2,22 @@ import { shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import type { BlacklistRow } from '../../../shared/types/localdb'
 import { addBlacklist, fetchBlacklist, removeBlacklist } from '../modules/blacklist/api'
+import { resolveAssetUrl } from '../shared/utils/asset-url'
+
+function normalizeBlacklistRowAvatar(row: BlacklistRow): BlacklistRow {
+  const rawAvatar = typeof row.payload.avatar === 'string' ? row.payload.avatar : ''
+  const normalizedAvatar = resolveAssetUrl(rawAvatar)
+  if (normalizedAvatar === rawAvatar) {
+    return row
+  }
+  return {
+    ...row,
+    payload: {
+      ...row.payload,
+      avatar: normalizedAvatar
+    }
+  }
+}
 
 function mapToBlacklistRow(
   userUuid: string,
@@ -18,7 +34,7 @@ function mapToBlacklistRow(
     payload: {
       uuid: item.uuid,
       nickname: item.nickname,
-      avatar: item.avatar,
+      avatar: resolveAssetUrl(item.avatar),
       blacklistedAt: item.blacklistedAt
     },
     updatedAt: item.blacklistedAt || Date.now()
@@ -39,7 +55,8 @@ export const useBlacklistStore = defineStore('blacklist', () => {
     }
 
     try {
-      items.value = await window.api.localdb.blacklist.getList(userUuid)
+      const localRows = await window.api.localdb.blacklist.getList(userUuid)
+      items.value = localRows.map(normalizeBlacklistRowAvatar)
     } catch (error) {
       console.warn('load blacklist from localdb failed', error)
       items.value = []
@@ -116,7 +133,7 @@ export const useBlacklistStore = defineStore('blacklist', () => {
           payload: {
             uuid: targetUuid,
             nickname: profile?.nickname || targetUuid,
-            avatar: profile?.avatar || '',
+            avatar: resolveAssetUrl(profile?.avatar || ''),
             blacklistedAt: timestamp
           },
           updatedAt: timestamp

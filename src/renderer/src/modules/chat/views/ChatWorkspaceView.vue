@@ -35,6 +35,7 @@ import { usePresenceStore } from '../../../stores/presence.store'
 import { useSessionStore } from '../../../stores/session.store'
 import { useUserStore } from '../../../stores/user.store'
 import { normalizeErrorMessage } from '../../../shared/utils/error'
+import { resolveAssetUrl } from '../../../shared/utils/asset-url'
 import { formatPresenceStatusText } from '../../../shared/utils/presence'
 import { formatConversationTime } from '../../../shared/utils/time'
 
@@ -201,7 +202,7 @@ function mapSearchResult(item: SearchUserItemDTO): SearchResultItem {
   return {
     uuid: item.uuid,
     nickname: item.nickname || item.uuid,
-    avatar: item.avatar || '',
+    avatar: resolveAssetUrl(item.avatar || ''),
     signature: item.signature || '',
     isFriend: Boolean(item.isFriend),
     isOnline: null,
@@ -578,7 +579,7 @@ const profileEditorData = computed<ProfileEditorData | null>(() => {
     uuid: getString(payload, 'uuid') || userUuid.value,
     email: getString(payload, 'email'),
     telephone: getString(payload, 'telephone'),
-    avatar: getString(payload, 'avatar'),
+    avatar: resolveAssetUrl(getString(payload, 'avatar')),
     nickname: getString(payload, 'nickname'),
     gender: gender === 1 || gender === 2 || gender === 3 ? gender : 3,
     birthday: getString(payload, 'birthday'),
@@ -758,7 +759,7 @@ async function handleAddBlacklist(): Promise<void> {
   try {
     await blacklistStore.addToBlacklist(userUuid.value, selectedFriendRow.value.peerUuid, {
       nickname: getString(payload, 'nickname'),
-      avatar: getString(payload, 'avatar')
+      avatar: resolveAssetUrl(getString(payload, 'avatar'))
     })
     await friendStore.syncFromServer(userUuid.value)
   } catch (error) {
@@ -834,7 +835,7 @@ async function handleLoadScannedProfile(targetUuid: string): Promise<void> {
     scannedProfile.value = {
       uuid: userInfo.uuid,
       nickname: userInfo.nickname || userInfo.uuid,
-      avatar: userInfo.avatar || '',
+      avatar: resolveAssetUrl(userInfo.avatar || ''),
       signature: userInfo.signature || '',
       isFriend,
       isOnline: presenceState.isOnline,
