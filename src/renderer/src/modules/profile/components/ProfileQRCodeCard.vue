@@ -235,11 +235,11 @@ async function exportQRCodeImage(): Promise<void> {
 
 <style scoped>
 .qrcode-card {
-  border: 1px solid var(--c-border);
-  border-radius: 14px;
-  background: #fff;
-  padding: 14px;
-  box-shadow: var(--shadow-1);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius-xl);
+  background: var(--c-bg-panel-solid);
+  padding: 24px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
 }
 
 .card-header {
@@ -251,34 +251,36 @@ async function exportQRCodeImage(): Promise<void> {
 
 .card-header h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
+  font-weight: 700;
   color: var(--c-text-main);
 }
 
 .hint {
   margin: 8px 0 0;
-  color: var(--c-text-muted);
-  font-size: 12px;
+  color: var(--c-text-sub);
+  font-size: 13px;
 }
 
 .preview-wrap {
-  margin-top: 10px;
-  border: 1px solid var(--c-border);
-  border-radius: 12px;
-  background: linear-gradient(180deg, #f8faf9 0%, #f1f4f3 100%);
-  padding: 10px;
+  margin-top: 20px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, #fafafa 0%, #f4f5f5 100%);
+  padding: 20px;
 }
 
 .preview-box {
-  width: min(100%, 260px);
+  width: min(100%, 280px);
   aspect-ratio: 1;
   margin: 0 auto;
-  border-radius: 10px;
+  border-radius: var(--radius-md);
   background: #fff;
-  border: 1px solid #d9dee6;
+  border: 1px solid rgba(0, 0, 0, 0.06);
   display: grid;
   place-items: center;
   overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
 .preview-box img {
@@ -289,101 +291,109 @@ async function exportQRCodeImage(): Promise<void> {
 
 .preview-empty {
   margin: 0;
-  padding: 0 14px;
-  font-size: 12px;
-  line-height: 1.5;
+  padding: 0 20px;
+  font-size: 13px;
+  line-height: 1.6;
   color: var(--c-text-muted);
   text-align: center;
 }
 
 .preview-caption {
-  margin: 8px 0 0;
+  margin: 16px 0 0;
   color: var(--c-text-sub);
-  font-size: 11px;
+  font-size: 12px;
   text-align: center;
 }
 
 .qrcode-url-wrap {
-  margin-top: 10px;
+  margin-top: 24px;
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .qrcode-url-wrap label,
 .parse-field span {
-  font-size: 12px;
-  color: var(--c-text-sub);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--c-text-main);
+  margin-left: 2px;
 }
 
 .url-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: 12px;
 }
 
 .url-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .url-row input {
   width: 100%;
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
-  padding: 8px 10px;
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
   font-size: 13px;
   color: var(--c-text-main);
+  background: rgba(0, 0, 0, 0.03);
   outline: none;
+  transition: all 0.2s ease;
 }
 
 .url-row input:focus {
+  background: #fff;
   border-color: var(--c-primary);
+  box-shadow: 0 0 0 4px var(--c-primary-soft);
 }
 
 .meta-grid {
-  margin-top: 10px;
+  margin-top: 16px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 12px;
 }
 
 .meta-grid p {
   margin: 0;
-  padding: 8px 10px;
-  border: 1px solid var(--c-border);
-  border-radius: 10px;
-  background: #fafbfc;
+  padding: 12px 14px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .meta-grid span {
   display: block;
-  color: var(--c-text-muted);
-  font-size: 11px;
+  color: var(--c-text-sub);
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .meta-grid strong {
   display: block;
-  margin-top: 4px;
+  margin-top: 6px;
   color: var(--c-text-main);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   word-break: break-all;
 }
 
 .parse-field {
-  margin-top: 10px;
+  margin-top: 24px;
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .action-btn {
   border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 7px 12px;
-  font-size: 12px;
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease-out;
+  transition: all var(--duration-fast) var(--ease-out);
 }
 
 .action-btn:disabled {
@@ -394,10 +404,13 @@ async function exportQRCodeImage(): Promise<void> {
 .action-btn--primary {
   color: #fff;
   background: var(--c-primary);
+  box-shadow: 0 4px 10px rgba(0, 198, 112, 0.3);
 }
 
 .action-btn--primary:hover:not(:disabled) {
   background: var(--c-primary-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0, 198, 112, 0.4);
 }
 
 .action-btn--ghost {
@@ -407,19 +420,21 @@ async function exportQRCodeImage(): Promise<void> {
 }
 
 .action-btn--ghost:hover:not(:disabled) {
-  border-color: #c7ced7;
+  border-color: var(--c-text-main);
+  color: var(--c-text-main);
+  transform: translateY(-1px);
 }
 
 .message {
-  margin: 8px 0 0;
+  margin: 12px 0 0;
   color: var(--c-primary);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .error {
-  margin: 8px 0 0;
+  margin: 12px 0 0;
   color: var(--c-danger);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 @media (max-width: 1199px) {

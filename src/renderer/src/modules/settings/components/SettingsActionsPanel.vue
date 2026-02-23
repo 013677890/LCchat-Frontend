@@ -195,7 +195,7 @@ function getLastSeenText(value: string): string {
 <style scoped>
 .settings-actions {
   display: grid;
-  gap: 12px;
+  gap: 20px;
 }
 
 .settings-card--full {
@@ -205,7 +205,7 @@ function getLastSeenText(value: string): string {
 .settings-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-  gap: 12px;
+  gap: 20px;
 }
 
 .settings-cell--security,
@@ -213,33 +213,38 @@ function getLastSeenText(value: string): string {
   grid-column: 1 / -1;
 }
 
-.blacklist-action-card {
-  border: 1px solid var(--c-border);
-  border-radius: 16px;
-  background: #fff;
-  padding: 14px;
-  box-shadow: var(--shadow-1);
+/* 全局统一样式的卡片表现：利用 var(--bg-panel-solid) 和 var(--shadow-md) */
+.blacklist-action-card,
+.device-section {
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: var(--radius-xl);
+  background: var(--c-bg-panel-solid);
+  padding: 24px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
 }
 
-.blacklist-action-card h3 {
+.blacklist-action-card h3,
+.device-header h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
+  font-weight: 700;
   color: var(--c-text-main);
 }
 
 .blacklist-action-card p {
-  margin: 8px 0;
+  margin: 8px 0 16px;
   color: var(--c-text-sub);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .action-btn {
   border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 7px 14px;
+  border-radius: var(--radius-sm);
+  padding: 8px 16px;
   font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease-out;
+  transition: all var(--duration-fast) var(--ease-out);
 }
 
 .action-btn:disabled {
@@ -248,14 +253,15 @@ function getLastSeenText(value: string): string {
 }
 
 .action-btn--danger {
-  color: #d44747;
-  background: rgba(245, 63, 63, 0.08);
-  border-color: rgba(245, 63, 63, 0.3);
+  color: #fff;
+  background: var(--c-danger);
+  box-shadow: 0 2px 6px rgba(245, 63, 63, 0.3);
 }
 
 .action-btn--danger:hover:not(:disabled) {
-  background: rgba(245, 63, 63, 0.14);
-  border-color: rgba(245, 63, 63, 0.4);
+  background: #d43b3b;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(245, 63, 63, 0.4);
 }
 
 .action-btn--ghost {
@@ -265,70 +271,71 @@ function getLastSeenText(value: string): string {
 }
 
 .action-btn--ghost:hover:not(:disabled) {
-  border-color: #c7ced7;
+  border-color: var(--c-text-main);
+  color: var(--c-text-main);
+  transform: translateY(-1px);
 }
 
 .apply-error {
-  margin: 8px 0 0;
+  margin: 12px 0 0;
   color: var(--c-danger);
-  font-size: 12px;
-}
-
-.device-section {
-  border: 1px solid var(--c-border);
-  border-radius: 16px;
-  background: #fff;
-  padding: 14px;
-  box-shadow: var(--shadow-1);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .device-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.device-header h3 {
-  margin: 0;
-  font-size: 14px;
-  color: var(--c-text-main);
+  margin-bottom: 16px;
 }
 
 .device-list {
   display: grid;
-  gap: 8px;
+  gap: 12px;
 }
 
 .device-item {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid var(--c-border);
-  border-radius: 12px;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  border-radius: var(--radius-lg);
   background: var(--c-bg-panel-soft);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.device-item:hover {
+  background: #fff;
+  border-color: var(--c-primary-soft);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
 }
 
 .device-meta strong {
   display: block;
   color: var(--c-text-main);
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 700;
   line-height: 1.4;
 }
 
 .device-meta p {
   margin: 4px 0 0;
   color: var(--c-text-sub);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .device-meta small {
-  display: block;
-  margin-top: 2px;
+  display: inline-block;
+  margin-top: 6px;
   color: var(--c-text-muted);
   font-size: 11px;
+  background: rgba(0, 0, 0, 0.04);
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
 }
 
 .device-actions {
@@ -336,20 +343,23 @@ function getLastSeenText(value: string): string {
 }
 
 .device-current {
-  display: inline-grid;
-  place-items: center;
-  padding: 4px 8px;
-  border-radius: 999px;
-  background: rgba(7, 193, 96, 0.14);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  background: rgba(0, 198, 112, 0.1);
   color: var(--c-primary);
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .device-empty {
   margin: 0;
+  padding: 24px 0;
+  text-align: center;
   color: var(--c-text-muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 @media (max-width: 1399px) {

@@ -65,119 +65,144 @@ const userInitial = computed(() => {
 
 <style scoped>
 .sidebar {
-  width: 72px;
-  min-width: 72px;
+  width: 76px;
+  min-width: 76px;
   background: var(--c-bg-sidebar);
-  border-right: 1px solid var(--c-border);
+  backdrop-filter: var(--blur-lg);
+  -webkit-backdrop-filter: var(--blur-lg);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 14px 8px;
-  gap: 14px;
+  padding: 16px 8px;
+  gap: 16px;
+  box-shadow: 1px 0 12px rgba(0, 0, 0, 0.08);
+  border-right: 1px solid rgba(255, 255, 255, 0.05); /* 利用透明白边强调质感 */
+  z-index: 10;
 }
 
 .brand {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
   display: grid;
   place-items: center;
-  background: linear-gradient(135deg, #1ecf78 0%, #089a55 100%);
+  background: linear-gradient(135deg, #00E583 0%, #00B164 100%);
   color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  box-shadow: 0 6px 16px rgba(7, 193, 96, 0.35);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 12px rgba(0, 198, 112, 0.4);
 }
 
 .nav {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  width: auto;
+  gap: 12px;
+  width: 100%;
+  align-items: center;
 }
 
 .nav-item {
   position: relative;
-  width: 42px;
-  height: 42px;
-  border: 1px solid transparent;
+  width: 48px;
+  height: 48px;
+  border: none;
   background: transparent;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 0;
   cursor: pointer;
   color: var(--c-text-on-dark-muted);
   display: grid;
   place-items: center;
-  font-size: 12px;
-  line-height: 1.2;
-  transition: all 0.2s ease;
+  transition: all var(--duration-fast) var(--ease-out);
 }
 
 .nav-item:hover {
   color: #fff;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--c-bg-sidebar-active);
+  transform: translateY(-2px);
 }
 
 .nav-item--active {
-  color: #fff;
-  background: rgba(7, 193, 96, 0.24);
-  border-color: rgba(7, 193, 96, 0.5);
-  box-shadow: inset 3px 0 0 #07c160;
+  color: var(--c-primary);
+  background: rgba(0, 198, 112, 0.15);
+  box-shadow: inset 4px 0 0 var(--c-primary);
+  /* 使用伪元素制作更柔和的选中高亮 */
+}
+
+.nav-item--active::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  height: 24px;
+  width: 4px;
+  border-radius: 0 4px 4px 0;
+  background: var(--c-primary);
+  opacity: 0; /* 根据需要也可以用这种方式代替 box-shadow */
 }
 
 .nav-icon {
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: 0.2px;
 }
 
 .nav-badge {
   position: absolute;
-  top: -3px;
-  right: -3px;
-  min-width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  padding: 0 4px;
+  top: 2px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  border-radius: var(--radius-full);
+  padding: 0 5px;
   display: inline-grid;
   place-items: center;
   background: var(--c-danger);
   color: #fff;
-  font-size: 10px;
-  line-height: 1;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: bold;
+  box-shadow: var(--shadow-sm);
+  border: 2px solid var(--c-bg-sidebar); /* 加上边框，避免与背景融为一体 */
 }
 
 .sidebar-footer {
   margin-top: auto;
   display: grid;
-  gap: 8px;
+  gap: 12px;
+  width: 100%;
+  place-items: center;
 }
 
 .profile-btn,
 .logout {
-  width: 38px;
-  height: 38px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 11px;
-  background: rgba(255, 255, 255, 0.08);
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--c-border-light);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--c-text-on-dark);
-  font-size: 12px;
+  font-size: 14px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: bold;
   display: grid;
   place-items: center;
+  transition: all var(--duration-fast) var(--ease-out);
 }
 
 .profile-btn {
-  background: rgba(7, 193, 96, 0.22);
-  border-color: rgba(7, 193, 96, 0.4);
+  background: var(--c-primary-soft);
+  border-color: rgba(0, 198, 112, 0.3);
+  color: var(--c-primary);
+}
+
+.profile-btn:hover {
+  background: rgba(0, 198, 112, 0.25);
+  transform: translateY(-2px);
 }
 
 .logout:hover {
   color: #fff;
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.22);
+  background: var(--c-bg-sidebar-active);
+  border-color: rgba(255, 255, 255, 0.3);
+  transform: translateY(-2px);
 }
 </style>

@@ -103,126 +103,164 @@ const composerTools = [
 .message-pane {
   flex: 1;
   min-width: 0;
-  background: #f3f5f7;
+  background: var(--c-bg-app);
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
+/* 顶部 Header：增加毛玻璃吸顶效果 */
 .header {
-  min-height: 60px;
-  border-bottom: 1px solid var(--c-border);
+  min-height: 64px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.04);
   display: flex;
   align-items: center;
-  padding: 8px 20px;
-  background: #fff;
+  padding: 12px 24px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--blur-md);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .header h2 {
   margin: 0;
-  font-size: 16px;
+  font-size: 18px;
+  font-weight: 700;
   color: var(--c-text-main);
 }
 
 .title-wrap p {
-  margin: 5px 0 0;
-  font-size: 11px;
-  color: var(--c-text-muted);
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--c-text-sub);
 }
 
 .history {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 20px;
+  padding: 24px;
+  /* 为底部预留一些空间 */
+  padding-bottom: 40px;
 }
 
 .message-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 20px;
 }
 
 .bubble-row {
   display: flex;
   justify-content: flex-start;
+  animation: slideUp 0.3s var(--ease-out) forwards;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .bubble-row--self {
   justify-content: flex-end;
 }
 
+/* 消息气泡现代化重写 */
 .bubble {
-  max-width: min(70%, 540px);
-  border-radius: 2px 12px 12px 12px;
-  padding: 10px 14px;
-  background: #fff;
-  border: 1px solid #e8edf2;
-  box-shadow: var(--shadow-1);
+  max-width: min(75%, 600px);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) 4px;
+  padding: 12px 16px;
+  background: var(--c-bg-panel-solid);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03), 0 1px 3px rgba(0, 0, 0, 0.04);
+  position: relative;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.bubble:hover {
+  transform: translateY(-1px);
 }
 
 .bubble-row--self .bubble {
-  background: #95ec69;
-  border-color: #84d85f;
-  border-radius: 12px 2px 12px 12px;
+  background: linear-gradient(135deg, var(--c-primary) 0%, #00AE62 100%);
+  color: #fff;
+  border-radius: var(--radius-lg) var(--radius-lg) 4px var(--radius-lg);
+  box-shadow: 0 6px 16px rgba(0, 198, 112, 0.2), 0 2px 4px rgba(0, 198, 112, 0.1);
+  border: none;
 }
 
 .bubble p {
   margin: 0;
-  color: var(--c-text-main);
-  line-height: 1.5;
+  color: inherit; /* 继承外层由于 --self 改变的颜色 */
+  line-height: 1.6;
+  font-size: 14px;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* 对方的字体颜色 */
+.bubble-row:not(.bubble-row--self) .bubble p {
+  color: var(--c-text-main);
 }
 
 .bubble time {
   display: block;
   text-align: right;
-  margin-top: 4px;
-  color: var(--c-text-muted);
+  margin-top: 6px;
   font-size: 11px;
+  opacity: 0.6;
 }
 
 .empty {
   margin: 0;
+  text-align: center;
   color: var(--c-text-muted);
-  font-size: 13px;
+  font-size: 14px;
+  padding-top: 40px;
 }
 
+/* 底部输入框：去除边框，打造悬浮在底部的组件感 */
 .composer {
-  background: #eef2f5;
-  border-top: 1px solid var(--c-border);
-  padding: 10px 18px 12px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--blur-md);
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
+  padding: 12px 24px 16px;
 }
 
 .tool-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
 .tool-row button {
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--c-text-muted);
-  padding: 4px 6px;
+  color: var(--c-text-sub);
+  padding: 6px 10px;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   cursor: pointer;
 }
 
 .tool-row button:hover {
-  color: var(--c-text-sub);
-  background: rgba(255, 255, 255, 0.8);
+  color: var(--c-text-main);
+  background: var(--c-bg-hover);
+  transform: translateY(-1px);
 }
 
 .tool-row span {
-  font-size: 14px;
+  font-size: 16px;
+  font-weight: 600;
 }
 
 .tool-row small {
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .textarea-wrap {
@@ -231,49 +269,64 @@ const composerTools = [
 
 .composer textarea {
   width: 100%;
-  border: 1px solid #dbe1e8;
-  border-radius: 12px;
+  border: 1.5px solid transparent;
+  border-radius: var(--radius-lg);
+  background: #f4f6f8;
   resize: none;
-  padding: 11px 80px 11px 12px;
-  font-size: 14px;
+  padding: 14px 90px 14px 16px;
+  font-size: 15px;
   font-family: inherit;
   outline: none;
-  transition: border-color 0.15s ease-out;
+  transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
 .composer textarea:focus {
-  border-color: var(--c-primary);
-  box-shadow: 0 0 0 3px rgba(7, 193, 96, 0.12);
+  background: #fff;
+  border-color: var(--c-primary-soft);
+  box-shadow: 0 0 0 4px var(--c-primary-soft);
+}
+
+.composer textarea::placeholder {
+  color: var(--c-text-muted);
 }
 
 .send-btn {
   position: absolute;
-  right: 10px;
-  bottom: 10px;
+  right: 12px;
+  bottom: 12px;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: var(--c-primary);
   color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 16px;
   cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 198, 112, 0.3);
+  transition: all var(--duration-fast) var(--ease-spring);
 }
 
 .send-btn:hover {
   background: var(--c-primary-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0, 198, 112, 0.4);
+}
+
+.send-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(0, 198, 112, 0.3);
 }
 
 .composer-actions {
-  margin-top: 8px;
+  margin-top: 12px;
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 8px;
 }
 
 .composer-actions span {
   color: var(--c-text-muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 </style>
