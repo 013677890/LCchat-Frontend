@@ -1,4 +1,6 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { Toaster } from 'vue-sonner'
+</script>
 
 <template>
   <RouterView v-slot="{ Component, route }">
@@ -6,6 +8,7 @@
       <component :is="Component" :key="route.fullPath" />
     </Transition>
   </RouterView>
+  <Toaster position="bottom-right" expand richColors />
 </template>
 
 <style scoped>

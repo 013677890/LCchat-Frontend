@@ -11,11 +11,32 @@ const routes: RouteRecordRaw[] = [
   },
   {
     path: '/',
-    name: 'chat',
-    component: () => import('../modules/chat/views/ChatWorkspaceView.vue'),
+    component: () => import('./layouts/MainLayout.vue'),
     meta: {
       requiresAuth: true
-    }
+    },
+    children: [
+      {
+        path: '',
+        name: 'chat',
+        component: () => import('../modules/chat/views/ChatView.vue'),
+      },
+      {
+        path: 'contact',
+        name: 'contact',
+        component: () => import('../modules/contact/views/ContactView.vue'),
+      },
+      {
+        path: 'discover',
+        name: 'discover',
+        component: () => import('../modules/discover/views/DiscoverView.vue'),
+      },
+      {
+        path: 'settings',
+        name: 'settings',
+        component: () => import('../modules/settings/views/SettingsView.vue'),
+      }
+    ]
   },
   {
     path: '/:pathMatch(.*)*',

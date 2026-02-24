@@ -1,8 +1,4 @@
 <script setup lang="ts">
-import ProfileEditorCard, {
-  type ProfileEditorViewData
-} from '../../profile/components/ProfileEditorCard.vue'
-import ProfileQRCodeCard from '../../profile/components/ProfileQRCodeCard.vue'
 import SecurityCenterCard, {
   type ChangeEmailPayload,
   type ChangePasswordPayload,
@@ -16,17 +12,6 @@ const props = defineProps<{
   selectedBlacklistLabel: string
   blacklistActionPending?: boolean
   blacklistActionError?: string
-  profile: ProfileEditorViewData | null
-  profileSavePending?: boolean
-  profileAvatarUploading?: boolean
-  profileSaveError?: string
-  qrCodeUrl: string
-  qrCodeToken: string
-  qrCodeExpireAt: string
-  qrcodeLoading?: boolean
-  qrcodeParsing?: boolean
-  qrcodeMessage?: string
-  qrcodeError?: string
   currentEmail: string
   sendingVerifyCode?: boolean
   codeCooldownSeconds?: number
@@ -44,14 +29,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   removeBlacklist: []
-  profileSubmit: [
-    payload: { nickname?: string; gender?: number; birthday?: string; signature?: string }
-  ]
-  profileUploadAvatar: [file: File]
-  profileClearError: []
-  qrcodeClearFeedback: []
-  refreshQrCode: []
-  parseQrCode: [input: string]
   securityClearFeedback: []
   requestEmailCode: [email: string]
   submitEmail: [payload: ChangeEmailPayload]
@@ -99,33 +76,6 @@ function getLastSeenText(value: string): string {
     </section>
 
     <div class="settings-grid">
-      <div class="settings-cell settings-cell--profile">
-        <ProfileEditorCard
-          :profile="props.profile"
-          :saving="props.profileSavePending"
-          :avatar-uploading="props.profileAvatarUploading"
-          :error-message="props.profileSaveError"
-          @clear-error="emit('profileClearError')"
-          @submit="emit('profileSubmit', $event)"
-          @upload-avatar="emit('profileUploadAvatar', $event)"
-        />
-      </div>
-
-      <div class="settings-cell settings-cell--qrcode">
-        <ProfileQRCodeCard
-          :qr-code-url="props.qrCodeUrl"
-          :qr-code-token="props.qrCodeToken"
-          :expire-at="props.qrCodeExpireAt"
-          :loading="props.qrcodeLoading"
-          :parsing="props.qrcodeParsing"
-          :message="props.qrcodeMessage"
-          :error-message="props.qrcodeError"
-          @clear-feedback="emit('qrcodeClearFeedback')"
-          @refresh="emit('refreshQrCode')"
-          @parse="emit('parseQrCode', $event)"
-        />
-      </div>
-
       <div class="settings-cell settings-cell--security">
         <SecurityCenterCard
           :current-email="props.currentEmail"

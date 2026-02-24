@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { MessageCircle, Users, Compass, Settings, LogOut } from 'lucide-vue-next'
 import type { MainNavKey } from '../../../stores/app.store'
 
 const props = defineProps<{
@@ -11,14 +12,15 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [MainNavKey]
   logout: []
+  clickAvatar: []
 }>()
 
-const navItems: Array<{ key: MainNavKey; label: string; icon: string }> = [
-  { key: 'chat', label: '消息', icon: 'M' },
-  { key: 'contacts', label: '通讯录', icon: 'C' },
-  { key: 'discover', label: '发现', icon: 'D' },
-  { key: 'settings', label: '设置', icon: 'S' }
-]
+const navItems = [
+  { key: 'chat', label: '消息', icon: MessageCircle },
+  { key: 'contacts', label: '通讯录', icon: Users },
+  { key: 'discover', label: '发现', icon: Compass },
+  { key: 'settings', label: '设置', icon: Settings }
+] as const
 
 function handleSelect(nav: MainNavKey): void {
   emit('select', nav)
@@ -47,7 +49,7 @@ const userInitial = computed(() => {
         :title="item.label"
         @click="handleSelect(item.key)"
       >
-        <span class="nav-icon">{{ item.icon }}</span>
+        <component :is="item.icon" :size="22" stroke-width="2.2" class="nav-icon" />
         <small v-if="item.key === 'discover' && (props.discoverBadge || 0) > 0" class="nav-badge">
           {{ Math.min(props.discoverBadge || 0, 99) }}
         </small>
@@ -55,10 +57,12 @@ const userInitial = computed(() => {
     </nav>
 
     <footer class="sidebar-footer">
-      <button class="profile-btn" type="button" :title="props.userLabel">
+      <button class="profile-btn" type="button" :title="props.userLabel" @click="emit('clickAvatar')">
         {{ userInitial }}
       </button>
-      <button class="logout" type="button" title="退出登录" @click="emit('logout')">⎋</button>
+      <button class="logout" type="button" title="退出登录" @click="emit('logout')">
+        <LogOut :size="20" stroke-width="2.2" />
+      </button>
     </footer>
   </aside>
 </template>
