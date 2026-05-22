@@ -12,6 +12,7 @@ import { useBlacklistStore } from '../../stores/blacklist.store'
 import { useApplyStore } from '../../stores/apply.store'
 import { useDeviceStore } from '../../stores/device.store'
 import { useSessionStore } from '../../stores/session.store'
+import { useConnStore } from '../../stores/conn.store'
 import { toast } from 'vue-sonner'
 import { resolveAssetUrl } from '../../shared/utils/asset-url'
 
@@ -25,9 +26,11 @@ const blacklistStore = useBlacklistStore()
 const applyStore = useApplyStore()
 const deviceStore = useDeviceStore()
 const sessionStore = useSessionStore()
+const connStore = useConnStore()
 
 const { activeNav } = storeToRefs(appStore)
 const { profile, qrCode } = storeToRefs(userStore)
+const { status: connStatus } = storeToRefs(connStore)
 
 const isProfileModalOpen = ref(false)
 const profileSavePending = ref(false)
@@ -68,6 +71,7 @@ function handleNavChange(nextNav: MainNavKey) {
 }
 
 function handleLogout() {
+  connStore.disconnect()
   authStore.signOut()
   router.replace('/login')
 }
@@ -144,6 +148,8 @@ onMounted(async () => {
     return
   }
 
+  connStore.connect()
+
   await Promise.all([
     userStore.loadProfile(authStore.userUuid),
     sessionStore.bootstrap(authStore.userUuid),
@@ -172,18 +178,47 @@ onMounted(async () => {
     <SidebarNav
       :active-nav="activeNav"
       :user-label="userLabel"
-      :discover-badge="0"
+      :discover-badge="applyStore.unreadCount"
+      :conn-status="connStatus"
       @select="handleNavChange"
       @logout="handleLogout"
       @click-avatar="handleAvatarClick"
     />
     
-    <section class="flex-1 min-w-0 h-full flex relative">
-      <router-view v-slot="{ Component }">
-        <transition name="fade" mode="out-in">
-          <component :is="Component" />
-        </transition>
-      </router-view>
+    <section class="flex-1 min-w-0 h-full flex flex-col relative">
+      <!-- Floating Glassmorphic Reconnection/Auth Banner -->
+      <transition name="slide-down">
+        <div 
+          v-if="connStatus === 'connecting' || connStatus === 'reconnecting' || connStatus === 'auth_failed'" 
+          class="absolute top-4 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-full flex items-center gap-3.5 glass-banner border shadow-lg animate-pulse-slow"
+          :class="{ 'glass-banner--warning': connStatus === 'auth_failed' }"
+        >
+          <span class="indicator-dot" :class="{ 'indicator-dot--warning': connStatus === 'auth_failed' }"></span>
+          <span class="text-xs font-semibold text-neutral-700 tracking-wide">
+            {{ 
+              connStatus === 'auth_failed' 
+                ? '身份认证已失效，请重新登录' 
+                : '正在为您连接加密通讯服务器，请稍候...' 
+            }}
+          </span>
+          <button 
+            v-if="connStatus === 'auth_failed'" 
+            type="button" 
+            class="text-xs px-3 py-1 rounded-full bg-amber-500 hover:bg-amber-600 text-white font-bold transition shadow-sm hover:shadow active:scale-95 duration-100"
+            @click="handleLogout"
+          >
+            重新登录
+          </button>
+        </div>
+      </transition>
+
+      <div class="flex-1 w-full h-full relative">
+        <router-view v-slot="{ Component }">
+          <transition name="fade" mode="out-in">
+            <component :is="Component" />
+          </transition>
+        </router-view>
+      </div>
     </section>
 
     <ProfileModal
@@ -200,3 +235,68 @@ onMounted(async () => {
     />
   </main>
 </template>
+
+<style scoped>
+.glass-banner {
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--blur-md);
+  border: 1px solid rgba(0, 198, 112, 0.18);
+  box-shadow: var(--shadow-lg);
+}
+
+.glass-banner--warning {
+  border-color: rgba(251, 191, 36, 0.4);
+  background: rgba(254, 243, 199, 0.85);
+}
+
+.indicator-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background-color: var(--c-primary);
+  box-shadow: 0 0 8px var(--c-primary);
+  animation: pulse-dot 1.6s infinite ease-in-out;
+}
+
+.indicator-dot--warning {
+  background-color: var(--c-warning);
+  box-shadow: 0 0 8px var(--c-warning);
+}
+
+.animate-pulse-slow {
+  animation: breathe 3s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 0.6;
+  }
+}
+
+@keyframes breathe {
+  0%, 100% {
+    opacity: 0.98;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/* Slide Down transition */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: opacity 0.3s var(--ease-out), transform 0.35s var(--ease-spring);
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  transform: translate(-50%, -20px);
+}
+</style>

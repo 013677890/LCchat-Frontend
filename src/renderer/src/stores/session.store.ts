@@ -1,6 +1,11 @@
 import { computed, ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
+import { toast } from 'vue-sonner'
 import type { ConversationRow, JsonObject, MessageRow } from '../../../shared/types/localdb'
+import { httpClient } from '../shared/http/client'
+import { useFriendStore } from './friend.store'
+import { useGroupStore } from './group.store'
+import { useAppStore } from './app.store'
 
 function getString(payload: JsonObject, key: string, fallback = ''): string {
   const value = payload[key]
@@ -12,73 +17,78 @@ function getNumber(payload: JsonObject, key: string, fallback = 0): number {
   return typeof value === 'number' ? value : fallback
 }
 
-function createSeedConversations(userUuid: string): ConversationRow[] {
-  const timestamp = Date.now()
-  return [
-    {
-      userUuid,
-      convId: 'conv:product',
-      payload: {
-        title: '产品群',
-        preview: '今晚发布候选版本，记得走 smoke 测试。',
-        unread: 2,
-        avatarColor: '#6ca06f'
-      },
-      updatedAt: timestamp - 5 * 60 * 1000
-    },
-    {
-      userUuid,
-      convId: 'conv:ops',
-      payload: {
-        title: '运维值班',
-        preview: '网关 CPU 峰值恢复，告警已解除。',
-        unread: 0,
-        avatarColor: '#7d8da5'
-      },
-      updatedAt: timestamp - 20 * 60 * 1000
-    },
-    {
-      userUuid,
-      convId: 'conv:design',
-      payload: {
-        title: '设计评审',
-        preview: '聊天输入区交互确认通过，进入联调阶段。',
-        unread: 0,
-        avatarColor: '#9d7f5f'
-      },
-      updatedAt: timestamp - 40 * 60 * 1000
+function mapMsgItemToRow(userUuid: string, item: any): MessageRow {
+  let text = ""
+  try {
+    const contentObj = typeof item.content === 'string' ? JSON.parse(item.content) : item.content
+    text = contentObj.text || contentObj.preview || ""
+  } catch (e) {
+    text = item.content || ""
+  }
+
+  if (item.status === 1) {
+    try {
+      const contentObj = typeof item.content === 'string' ? JSON.parse(item.content) : item.content
+      text = contentObj.text || "撤回了一条消息"
+    } catch (e) {
+      text = "撤回了一条消息"
     }
-  ]
+  }
+
+  return {
+    userUuid,
+    convId: item.convId,
+    msgId: item.msgId,
+    clientMsgId: item.clientMsgId,
+    seq: Number(item.seq),
+    sendTime: Number(item.sendTime),
+    status: item.status,
+    payload: {
+      text: text,
+      from: item.fromUuid === userUuid ? 'self' : 'peer',
+      fromUuid: item.fromUuid,
+      originalContent: item.content
+    }
+  }
 }
 
-function createSeedMessages(userUuid: string, convId: string): MessageRow[] {
-  const baseTime = Date.now() - 15 * 60 * 1000
-  return [
-    {
-      userUuid,
-      convId,
-      msgId: `${convId}-seed-1`,
-      seq: 1,
-      sendTime: baseTime,
-      payload: {
-        text: '欢迎使用 LCchat，本地缓存已经初始化。',
-        from: 'peer'
-      },
-      status: 1
-    },
-    {
-      userUuid,
-      convId,
-      msgId: `${convId}-seed-2`,
-      seq: 2,
-      sendTime: baseTime + 2 * 60 * 1000,
-      payload: {
-        text: '你现在可以离线查看最近会话和草稿。',
-        from: 'self'
-      },
-      status: 1
+function mapConversationItemToRow(userUuid: string, item: any): ConversationRow {
+  let previewText = ""
+  if (item.lastMsg) {
+    try {
+      const parsed = JSON.parse(item.lastMsg.previewJson || '{}')
+      previewText = parsed.preview || parsed.text || ""
+    } catch (e) {
+      previewText = item.lastMsg.previewJson || ""
     }
-  ]
+  }
+
+  return {
+    userUuid,
+    convId: item.convId,
+    payload: {
+      title: item.convType === 2 ? `群聊` : `单聊`,
+      preview: previewText,
+      unread: item.unreadCount || 0,
+      mute: item.mute || false,
+      pin: item.pin || false,
+      convType: item.convType,
+      targetUuid: item.targetUuid,
+      avatarColor: item.convType === 2 ? '#6ca06f' : '#7d8da5'
+    },
+    updatedAt: Number(item.updatedAt)
+  }
+}
+
+function sortConversations(list: ConversationRow[]): ConversationRow[] {
+  return [...list].sort((a, b) => {
+    const aPin = a.payload.pin === true ? 1 : 0
+    const bPin = b.payload.pin === true ? 1 : 0
+    if (aPin !== bPin) {
+      return bPin - aPin
+    }
+    return b.updatedAt - a.updatedAt
+  })
 }
 
 export const useSessionStore = defineStore('session', () => {
@@ -119,9 +129,7 @@ export const useSessionStore = defineStore('session', () => {
   })
 
   async function bootstrap(userUuid: string): Promise<void> {
-    if (!userUuid) {
-      return
-    }
+    if (!userUuid) return
 
     if (currentUserUuid.value === userUuid && conversations.value.length > 0) {
       return
@@ -131,118 +139,596 @@ export const useSessionStore = defineStore('session', () => {
     currentUserUuid.value = userUuid
     await safeWrite(() => window.api.localdb.init())
 
-    let cachedConversations = await safeRead(
+    // 1. Load from local SQLite cache
+    const cachedConversations = await safeRead(
       () => window.api.localdb.chat.getConversations(userUuid),
       []
     )
-    if (cachedConversations.length === 0) {
-      cachedConversations = createSeedConversations(userUuid)
-      await safeWrite(() =>
-        window.api.localdb.chat.upsertConversations(userUuid, cachedConversations)
-      )
-    }
+    conversations.value = sortConversations(cachedConversations)
 
-    conversations.value = [...cachedConversations].sort((a, b) => b.updatedAt - a.updatedAt)
-    activeConvId.value = conversations.value[0]?.convId ?? ''
+    // 2. Resync from server
+    await syncConversationsFromServer(userUuid)
 
-    if (activeConvId.value) {
-      await openConversation(activeConvId.value)
+    if (conversations.value.length > 0) {
+      activeConvId.value = conversations.value[0]?.convId ?? ''
+      if (activeConvId.value) {
+        await openConversation(activeConvId.value)
+      }
     }
 
     loading.value = false
   }
 
-  async function openConversation(convId: string): Promise<void> {
-    if (!currentUserUuid.value) {
-      return
+  async function syncConversationsFromServer(userUuid: string): Promise<void> {
+    try {
+      const response = await httpClient.get('/api/v1/auth/conversations')
+      const items = response.data.data.conversations || []
+      
+      const mapped = items.map((item: any) => mapConversationItemToRow(userUuid, item))
+      await safeWrite(() => window.api.localdb.chat.upsertConversations(userUuid, mapped))
+      
+      conversations.value = sortConversations(mapped)
+    } catch (error) {
+      console.error('Failed to sync conversations from server:', error)
     }
+  }
+
+  async function openConversation(convId: string): Promise<void> {
+    if (!currentUserUuid.value) return
 
     activeConvId.value = convId
     const userUuid = currentUserUuid.value
 
+    // Load from local SQLite
     let messages = await safeRead(
       () => window.api.localdb.chat.getMessages(userUuid, convId, undefined, 40),
       []
     )
-    if (messages.length === 0) {
-      messages = createSeedMessages(userUuid, convId)
-      await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, messages))
+
+    // Pull from backend
+    try {
+      const response = await httpClient.get('/api/v1/auth/messages/pull', {
+        params: {
+          convId,
+          limit: 50,
+          direction: 0
+        }
+      })
+      
+      const serverMessages = response.data.data.messages || []
+      const mapped = serverMessages.map((item: any) => mapMsgItemToRow(userUuid, item))
+      
+      if (mapped.length > 0) {
+        await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, mapped))
+        messages = mapped
+      }
+    } catch (error) {
+      console.warn('Failed to pull messages from server, using cache', error)
     }
 
     messagesByConversation.value = {
       ...messagesByConversation.value,
-      [convId]: messages
+      [convId]: messages.sort((a, b) => a.sendTime - b.sendTime)
     }
 
     activeDraft.value = await safeRead(() => window.api.localdb.chat.getDraft(userUuid, convId), '')
+    
+    // Mark as read
+    if (messages.length > 0) {
+      const maxSeq = Math.max(...messages.map(m => m.seq || 0))
+      if (maxSeq > 0) {
+        await markRead(convId, maxSeq)
+      }
+    }
   }
 
   async function setDraft(draft: string): Promise<void> {
     activeDraft.value = draft
-
-    if (!currentUserUuid.value || !activeConvId.value) {
-      return
-    }
+    if (!currentUserUuid.value || !activeConvId.value) return
 
     await safeWrite(() =>
       window.api.localdb.chat.saveDraft(currentUserUuid.value, activeConvId.value, draft)
     )
   }
 
+  async function markRead(convId: string, readSeq: number) {
+    if (!currentUserUuid.value) return
+    try {
+      await httpClient.post('/api/v1/auth/conversations/mark-read', {
+        convId,
+        readSeq
+      })
+      
+      conversations.value = conversations.value.map(c => {
+        if (c.convId === convId) {
+          return {
+            ...c,
+            payload: {
+              ...c.payload,
+              unread: 0
+            }
+          }
+        }
+        return c
+      })
+    } catch (error) {
+      console.error('Failed to mark read:', error)
+    }
+  }
+
   async function sendMessage(text: string): Promise<void> {
     const normalizedText = text.trim()
-    if (!normalizedText || !currentUserUuid.value || !activeConvId.value) {
-      return
-    }
+    if (!normalizedText || !currentUserUuid.value || !activeConvId.value) return
 
     const userUuid = currentUserUuid.value
     const convId = activeConvId.value
+    const activeConv = activeConversation.value
+    if (!activeConv) return
+
+    const clientMsgId = crypto.randomUUID()
     const timestamp = Date.now()
-    const nextMessage: MessageRow = {
+    
+    // Optimistic insert
+    const tempMessage: MessageRow = {
       userUuid,
       convId,
-      msgId: crypto.randomUUID(),
+      msgId: clientMsgId,
+      clientMsgId,
       sendTime: timestamp,
       payload: {
         text: normalizedText,
-        from: 'self'
+        from: 'self',
+        fromUuid: userUuid
       },
-      status: 1
+      status: 0
     }
 
-    await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [nextMessage]))
-
-    const nextMessages = [...(messagesByConversation.value[convId] ?? []), nextMessage]
+    const currentMessages = messagesByConversation.value[convId] ?? []
     messagesByConversation.value = {
       ...messagesByConversation.value,
-      [convId]: nextMessages
+      [convId]: [...currentMessages, tempMessage]
     }
 
-    const nextConversations = conversations.value.map((item) => {
-      if (item.convId !== convId) {
-        return item
-      }
-
-      return {
-        ...item,
-        payload: {
-          ...item.payload,
-          preview: normalizedText
-        },
-        updatedAt: timestamp
-      }
-    })
-
-    const sortedConversations = [...nextConversations].sort((a, b) => b.updatedAt - a.updatedAt)
-    conversations.value = sortedConversations
-    await safeWrite(() =>
-      window.api.localdb.chat.upsertConversations(userUuid, sortedConversations)
-    )
+    updateConversationPreview(convId, normalizedText, timestamp)
     await setDraft('')
+
+    try {
+      const response = await httpClient.post('/api/v1/auth/messages/send', {
+        clientMsgId,
+        convType: activeConv.payload.convType,
+        targetUuid: activeConv.payload.targetUuid,
+        msgType: 1,
+        content: JSON.stringify({ text: normalizedText })
+      })
+
+      const respData = response.data.data
+      const confirmedMessage: MessageRow = {
+        userUuid,
+        convId,
+        msgId: respData.msgId,
+        clientMsgId,
+        seq: Number(respData.seq),
+        sendTime: Number(respData.sendTime),
+        status: 0,
+        payload: {
+          text: normalizedText,
+          from: 'self',
+          fromUuid: userUuid
+        }
+      }
+
+      await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [confirmedMessage]))
+      
+      const filtered = (messagesByConversation.value[convId] ?? []).filter(m => m.msgId !== clientMsgId)
+      messagesByConversation.value = {
+        ...messagesByConversation.value,
+        [convId]: [...filtered, confirmedMessage].sort((a, b) => a.sendTime - b.sendTime)
+      }
+    } catch (error) {
+      console.error('Failed to send message:', error)
+      
+      const failedMessage: MessageRow = {
+        ...tempMessage,
+        status: -1
+      }
+      
+      await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [failedMessage]))
+      
+      const list = messagesByConversation.value[convId] ?? []
+      messagesByConversation.value = {
+        ...messagesByConversation.value,
+        [convId]: list.map(m => m.clientMsgId === clientMsgId ? failedMessage : m)
+      }
+    }
+  }
+
+  async function resendMessage(clientMsgId: string): Promise<void> {
+    if (!currentUserUuid.value || !activeConvId.value) return
+
+    const userUuid = currentUserUuid.value
+    const convId = activeConvId.value
+    const activeConv = activeConversation.value
+    if (!activeConv) return
+
+    const list = messagesByConversation.value[convId] ?? []
+    const failedMsg = list.find(m => m.clientMsgId === clientMsgId)
+    if (!failedMsg) return
+
+    // 1. Update status to 0 (retrying/sending)
+    const retryingMsg: MessageRow = {
+      ...failedMsg,
+      status: 0,
+      sendTime: Date.now()
+    }
+
+    messagesByConversation.value = {
+      ...messagesByConversation.value,
+      [convId]: list.map(m => m.clientMsgId === clientMsgId ? retryingMsg : m)
+    }
+
+    const text = typeof retryingMsg.payload.text === 'string' ? retryingMsg.payload.text : ''
+
+    try {
+      const response = await httpClient.post('/api/v1/auth/messages/send', {
+        clientMsgId,
+        convType: activeConv.payload.convType,
+        targetUuid: activeConv.payload.targetUuid,
+        msgType: 1,
+        content: JSON.stringify({ text })
+      })
+
+      const respData = response.data.data
+      const confirmedMessage: MessageRow = {
+        userUuid,
+        convId,
+        msgId: respData.msgId,
+        clientMsgId,
+        seq: Number(respData.seq),
+        sendTime: Number(respData.sendTime),
+        status: 0,
+        payload: {
+          text,
+          from: 'self',
+          fromUuid: userUuid
+        }
+      }
+
+      await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [confirmedMessage]))
+      
+      const filtered = (messagesByConversation.value[convId] ?? []).filter(
+        m => m.msgId !== clientMsgId && m.clientMsgId !== clientMsgId
+      )
+      messagesByConversation.value = {
+        ...messagesByConversation.value,
+        [convId]: [...filtered, confirmedMessage].sort((a, b) => a.sendTime - b.sendTime)
+      }
+      toast.success('消息已重新发送')
+    } catch (error) {
+      console.error('Failed to resend message:', error)
+      const failedMessage: MessageRow = {
+        ...retryingMsg,
+        status: -1
+      }
+      await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [failedMessage]))
+      
+      const currentList = messagesByConversation.value[convId] ?? []
+      messagesByConversation.value = {
+        ...messagesByConversation.value,
+        [convId]: currentList.map(m => m.clientMsgId === clientMsgId ? failedMessage : m)
+      }
+      toast.error('重发失败，请检查网络连接')
+    }
+  }
+
+  async function recallMessage(msgId: string): Promise<void> {
+    if (!currentUserUuid.value || !activeConvId.value) return
+
+    try {
+      await httpClient.post('/api/v1/auth/messages/recall', {
+        convId: activeConvId.value,
+        msgId
+      })
+
+      const userUuid = currentUserUuid.value
+      const convId = activeConvId.value
+      const currentMessages = messagesByConversation.value[convId] ?? []
+      
+      messagesByConversation.value[convId] = currentMessages.map(m => {
+        if (m.msgId === msgId) {
+          const updated = {
+            ...m,
+            status: 1,
+            payload: {
+              ...m.payload,
+              text: '消息已撤回'
+            }
+          }
+          safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [updated]))
+          return updated
+        }
+        return m
+      })
+    } catch (error) {
+      console.error('Failed to recall message:', error)
+    }
+  }
+
+  async function deleteConv(convId: string): Promise<void> {
+    if (!currentUserUuid.value) return
+    try {
+      await httpClient.delete(`/api/v1/auth/conversations/${convId}`)
+      conversations.value = conversations.value.filter(c => c.convId !== convId)
+      if (activeConvId.value === convId) {
+        activeConvId.value = conversations.value[0]?.convId ?? ''
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  async function updateConvSettings(convId: string, settings: { mute?: boolean; pin?: boolean }) {
+    if (!currentUserUuid.value) return
+    try {
+      await httpClient.patch('/api/v1/auth/conversations/settings', {
+        convId,
+        ...settings
+      })
+      conversations.value = conversations.value.map(c => {
+        if (c.convId === convId) {
+          return {
+            ...c,
+            payload: {
+              ...c.payload,
+              mute: settings.mute !== undefined ? settings.mute : (c.payload.mute ?? false),
+              pin: settings.pin !== undefined ? settings.pin : (c.payload.pin ?? false)
+            }
+          } as ConversationRow
+        }
+        return c
+      })
+      conversations.value = sortConversations(conversations.value)
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  function playNotificationSound(): void {
+    const appStore = useAppStore()
+    if (!appStore.soundEnabled) return
+
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+      if (!AudioContextClass) return
+      const ctx = new AudioContextClass()
+      
+      const now = ctx.currentTime
+      
+      // First tone (higher pitch)
+      const osc1 = ctx.createOscillator()
+      const gain1 = ctx.createGain()
+      osc1.type = 'sine'
+      osc1.frequency.setValueAtTime(880, now) // A5
+      osc1.frequency.exponentialRampToValueAtTime(1200, now + 0.15)
+      
+      gain1.gain.setValueAtTime(0.15, now)
+      gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4)
+      
+      osc1.connect(gain1)
+      gain1.connect(ctx.destination)
+      
+      // Second tone (lower harmony, slightly delayed)
+      const osc2 = ctx.createOscillator()
+      const gain2 = ctx.createGain()
+      osc2.type = 'sine'
+      osc2.frequency.setValueAtTime(659.25, now + 0.05) // E5
+      osc2.frequency.exponentialRampToValueAtTime(880, now + 0.2)
+      
+      gain2.gain.setValueAtTime(0.1, now + 0.05)
+      gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.45)
+      
+      osc2.connect(gain2)
+      gain2.connect(ctx.destination)
+      
+      osc1.start(now)
+      osc1.stop(now + 0.4)
+      
+      osc2.start(now + 0.05)
+      osc2.stop(now + 0.45)
+    } catch (e) {
+      console.warn('Failed to play notification sound', e)
+    }
+  }
+
+  // WS Handlers
+  async function handleIncomingMessage(userUuid: string, item: any): Promise<void> {
+    const convId = item.convId
+    const mapped = mapMsgItemToRow(userUuid, item)
+
+    await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [mapped]))
+
+    if (activeConvId.value === convId) {
+      const list = messagesByConversation.value[convId] ?? []
+      const filtered = list.filter(m => m.msgId !== mapped.msgId && m.clientMsgId !== mapped.clientMsgId)
+      messagesByConversation.value = {
+        ...messagesByConversation.value,
+        [convId]: [...filtered, mapped].sort((a, b) => a.sendTime - b.sendTime)
+      }
+
+      if (mapped.seq) {
+        await markRead(convId, mapped.seq)
+      }
+    } else {
+      conversations.value = conversations.value.map(c => {
+        if (c.convId === convId) {
+          return {
+            ...c,
+            payload: {
+              ...c.payload,
+              unread: Number(c.payload.unread || 0) + 1
+            }
+          }
+        }
+        return c
+      })
+    }
+
+    updateConversationPreview(convId, mapped.payload.text as string, mapped.sendTime)
+
+    // Play notification sound and show toast for incoming messages from others
+    if (item.fromUuid !== userUuid) {
+      playNotificationSound()
+
+      // Show toast if we are not actively viewing this conversation OR if the window is blurred
+      if (activeConvId.value !== convId || !document.hasFocus()) {
+        const appStore = useAppStore()
+        if (!appStore.toastEnabled) return
+
+        const friendStore = useFriendStore()
+        const groupStore = useGroupStore()
+        
+        let senderName = '未知用户'
+        const friend = friendStore.friends.find(f => f.peerUuid === item.fromUuid)
+        if (friend) {
+          senderName = (friend.payload.remark as string) || (friend.payload.nickname as string) || item.fromUuid
+        } else {
+          const member = groupStore.activeMembers.find(m => m.userUuid === item.fromUuid)
+          if (member) {
+            senderName = member.nickname || item.fromUuid
+          }
+        }
+
+        const conv = conversations.value.find(c => c.convId === convId)
+        const isGroup = conv?.payload.convType === 2
+        const preview = mapped.payload.text || '发送了一条消息'
+
+        if (isGroup) {
+          const groupName = conv?.payload.title || '群组'
+          toast.info(`${groupName} | ${senderName}: ${preview}`, {
+            duration: 4500,
+            action: {
+              label: '查看',
+              onClick: () => {
+                appStore.setActiveNav('chat')
+                openConversation(convId)
+              }
+            }
+          })
+        } else {
+          toast.info(`${senderName}: ${preview}`, {
+            duration: 4500,
+            action: {
+              label: '查看',
+              onClick: () => {
+                appStore.setActiveNav('chat')
+                openConversation(convId)
+              }
+            }
+          })
+        }
+      }
+    }
+  }
+
+  async function handleIncomingRecall(userUuid: string, notice: any): Promise<void> {
+    const convId = notice.convId
+    const msgId = notice.msgId
+
+    let messages = messagesByConversation.value[convId] ?? []
+    if (messages.length === 0) {
+      messages = await safeRead(() => window.api.localdb.chat.getMessages(userUuid, convId, undefined, 100), [])
+    }
+
+    const target = messages.find(m => m.msgId === msgId)
+    if (target) {
+      target.status = 1
+      target.payload.text = '消息已撤回'
+      await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [target]))
+    }
+
+    if (messagesByConversation.value[convId]) {
+      messagesByConversation.value[convId] = messagesByConversation.value[convId].map(m => {
+        if (m.msgId === msgId) {
+          return {
+            ...m,
+            status: 1,
+            payload: {
+              ...m.payload,
+              text: '消息已撤回'
+            }
+          }
+        }
+        return m
+      })
+    }
+  }
+
+  async function handleIncomingMarkRead(userUuid: string, notice: any): Promise<void> {
+    const convId = notice.convId
+    conversations.value = conversations.value.map(c => {
+      if (c.convId === convId) {
+        return {
+          ...c,
+          payload: {
+            ...c.payload,
+            unread: 0
+          }
+        }
+      }
+      return c
+    })
+  }
+
+  function updateConversationPreview(convId: string, previewText: string, timestamp: number) {
+    conversations.value = conversations.value.map(c => {
+      if (c.convId === convId) {
+        return {
+          ...c,
+          payload: {
+            ...c.payload,
+            preview: previewText
+          },
+          updatedAt: timestamp
+        }
+      }
+      return c
+    })
+    conversations.value = sortConversations(conversations.value)
   }
 
   function getConversationTitle(row: ConversationRow): string {
-    return getString(row.payload, 'title', row.convId)
+    const convType = Number(row.payload.convType)
+    const targetUuid = String(row.payload.targetUuid)
+
+    if (convType === 2) {
+      const groupStore = useGroupStore()
+      const group = groupStore.groups.find(g => g.groupUuid === targetUuid)
+      if (group) return group.name
+      return getString(row.payload, 'title', `群聊 (${targetUuid.substring(0, 4)})`)
+    } else {
+      const friendStore = useFriendStore()
+      const friend = friendStore.friends.find(f => f.peerUuid === targetUuid)
+      if (friend) {
+        const remark = String(friend.payload.remark || '')
+        const nickname = String(friend.payload.nickname || '')
+        return remark.trim() || nickname.trim() || `单聊 (${targetUuid.substring(0, 4)})`
+      }
+      return getString(row.payload, 'title', `单聊 (${targetUuid.substring(0, 4)})`)
+    }
+  }
+
+  function getConversationAvatar(row: ConversationRow): string {
+    const convType = Number(row.payload.convType)
+    const targetUuid = String(row.payload.targetUuid)
+
+    if (convType === 2) {
+      const groupStore = useGroupStore()
+      const group = groupStore.groups.find(g => g.groupUuid === targetUuid)
+      return group?.avatar || ''
+    } else {
+      const friendStore = useFriendStore()
+      const friend = friendStore.friends.find(f => f.peerUuid === targetUuid)
+      return String(friend?.payload?.avatar || '')
+    }
   }
 
   function getConversationPreview(row: ConversationRow): string {
@@ -263,6 +749,41 @@ export const useSessionStore = defineStore('session', () => {
     localDBAvailable.value = true
   }
 
+  async function startConversation(targetUuid: string, convType: number): Promise<string> {
+    let convId = ''
+    if (convType === 2) {
+      convId = targetUuid
+    } else {
+      const sorted = [currentUserUuid.value, targetUuid].sort()
+      convId = `p2p-${sorted.join('-')}`
+    }
+
+    const found = conversations.value.find(c => c.convId === convId)
+    if (!found) {
+      const newConv: ConversationRow = {
+        userUuid: currentUserUuid.value,
+        convId,
+        payload: {
+          title: convType === 2 ? '群聊' : '单聊',
+          preview: '',
+          unread: 0,
+          mute: false,
+          pin: false,
+          convType,
+          targetUuid,
+          avatarColor: convType === 2 ? '#6ca06f' : '#7d8da5'
+        },
+        updatedAt: Date.now()
+      }
+      conversations.value = [newConv, ...conversations.value]
+      await safeWrite(() => window.api.localdb.chat.upsertConversations(currentUserUuid.value, [newConv]))
+    }
+
+    activeConvId.value = convId
+    await openConversation(convId)
+    return convId
+  }
+
   return {
     currentUserUuid,
     conversations,
@@ -276,9 +797,20 @@ export const useSessionStore = defineStore('session', () => {
     openConversation,
     setDraft,
     sendMessage,
+    resendMessage,
+    recallMessage,
+    deleteConv,
+    updateConvSettings,
     getConversationTitle,
+    getConversationAvatar,
     getConversationPreview,
     getConversationUnread,
-    clearState
+    clearState,
+    handleIncomingMessage,
+    handleIncomingRecall,
+    handleIncomingMarkRead,
+    syncConversationsFromServer,
+    startConversation,
+    playNotificationSound
   }
 })

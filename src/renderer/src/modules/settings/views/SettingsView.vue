@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from '../../../stores/auth.store'
 import { useDeviceStore } from '../../../stores/device.store'
@@ -9,6 +9,7 @@ import { useBlacklistStore } from '../../../stores/blacklist.store'
 import { useRouter } from 'vue-router'
 import { useSettingsActions } from '../../chat/composables/useSettingsActions'
 import SettingsActionsPanel from '../components/SettingsActionsPanel.vue'
+import { toast } from 'vue-sonner'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -55,6 +56,28 @@ const {
   deviceStore,
   onSignedOut: async () => {
     await router.replace('/login')
+  }
+})
+
+// Setup premium toast feedback triggers
+watch(securityMessage, (newVal) => {
+  if (newVal) {
+    toast.success(newVal)
+    clearSecurityFeedback()
+  }
+})
+
+watch(securityError, (newVal) => {
+  if (newVal) {
+    toast.error(newVal)
+    clearSecurityFeedback()
+  }
+})
+
+watch(deviceActionError, (newVal) => {
+  if (newVal) {
+    toast.error(newVal)
+    deviceActionError.value = ''
   }
 })
 

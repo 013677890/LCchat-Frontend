@@ -6,6 +6,53 @@ import SecurityCenterCard, {
 } from '../../security/components/SecurityCenterCard.vue'
 import type { DeviceRecord } from '../../security/api'
 import { formatLastSeenAt } from '../../../shared/utils/presence'
+import { useAppStore } from '../../../stores/app.store'
+import { Bell, Volume2 } from 'lucide-vue-next'
+
+const appStore = useAppStore()
+
+function triggerTestChime() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
+    if (!AudioContextClass) return
+    const ctx = new AudioContextClass()
+    const now = ctx.currentTime
+    
+    // First tone (higher pitch)
+    const osc1 = ctx.createOscillator()
+    const gain1 = ctx.createGain()
+    osc1.type = 'sine'
+    osc1.frequency.setValueAtTime(880, now) // A5
+    osc1.frequency.exponentialRampToValueAtTime(1200, now + 0.15)
+    
+    gain1.gain.setValueAtTime(0.15, now)
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4)
+    
+    osc1.connect(gain1)
+    gain1.connect(ctx.destination)
+    
+    // Second tone (lower harmony, slightly delayed)
+    const osc2 = ctx.createOscillator()
+    const gain2 = ctx.createGain()
+    osc2.type = 'sine'
+    osc2.frequency.setValueAtTime(659.25, now + 0.05) // E5
+    osc2.frequency.exponentialRampToValueAtTime(880, now + 0.2)
+    
+    gain2.gain.setValueAtTime(0.1, now + 0.05)
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.45)
+    
+    osc2.connect(gain2)
+    gain2.connect(ctx.destination)
+    
+    osc1.start(now)
+    osc1.stop(now + 0.4)
+    
+    osc2.start(now + 0.05)
+    osc2.stop(now + 0.45)
+  } catch (e) {
+    console.warn('Failed to play test sound', e)
+  }
+}
 
 const props = defineProps<{
   hasSelectedBlacklist: boolean
@@ -94,6 +141,63 @@ function getLastSeenText(value: string): string {
         />
       </div>
 
+      <!-- Notification & Sound Settings Card -->
+      <section class="settings-cell settings-cell--notifications notifications-section">
+        <header class="notifications-header">
+          <h3>
+            <Bell :size="16" class="inline-block mr-2 text-[var(--c-primary)] align-text-bottom" />
+            通知与提示音
+          </h3>
+        </header>
+
+        <div class="notifications-list">
+          <div class="setting-item">
+            <div class="setting-meta">
+              <strong>提示音控制</strong>
+              <p>收到新消息、好友申请、入群申请时播放柔和的双音协奏提示音</p>
+            </div>
+            <label class="switch-container">
+              <input
+                type="checkbox"
+                :checked="appStore.soundEnabled"
+                @change="appStore.setSoundEnabled(($event.target as HTMLInputElement).checked)"
+              />
+              <span class="slider round"></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-meta">
+              <strong>通知横幅弹出</strong>
+              <p>在界面右上方弹出交互式磨砂气泡提示，方便快速查看与跳转</p>
+            </div>
+            <label class="switch-container">
+              <input
+                type="checkbox"
+                :checked="appStore.toastEnabled"
+                @change="appStore.setToastEnabled(($event.target as HTMLInputElement).checked)"
+              />
+              <span class="slider round"></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-meta">
+              <strong>音效试听与测试</strong>
+              <p>即时合成并预览双音阶高保真毛玻璃系统提示音</p>
+            </div>
+            <button
+              type="button"
+              class="action-btn action-btn--ghost flex items-center gap-2"
+              @click="triggerTestChime"
+            >
+              <Volume2 :size="14" />
+              测试提示音
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section class="device-section settings-cell settings-cell--device">
         <header class="device-header">
           <h3>设备管理</h3>
@@ -159,12 +263,14 @@ function getLastSeenText(value: string): string {
 }
 
 .settings-cell--security,
+.settings-cell--notifications,
 .settings-cell--device {
   grid-column: 1 / -1;
 }
 
 /* 全局统一样式的卡片表现：利用 var(--bg-panel-solid) 和 var(--shadow-md) */
 .blacklist-action-card,
+.notifications-section,
 .device-section {
   border: 1px solid rgba(0, 0, 0, 0.05);
   border-radius: var(--radius-xl);
@@ -174,6 +280,7 @@ function getLastSeenText(value: string): string {
 }
 
 .blacklist-action-card h3,
+.notifications-header h3,
 .device-header h3 {
   margin: 0;
   font-size: 16px;
@@ -318,8 +425,105 @@ function getLastSeenText(value: string): string {
   }
 
   .settings-cell--security,
+  .settings-cell--notifications,
   .settings-cell--device {
     grid-column: auto;
   }
+}
+
+/* Notifications settings inner layout */
+.notifications-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.setting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.02);
+  border-radius: var(--radius-lg);
+  background: var(--c-bg-panel-soft);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.setting-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(0, 198, 112, 0.15);
+  transform: translateY(-1px);
+}
+
+.setting-meta strong {
+  display: block;
+  color: var(--c-text-main);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.setting-meta p {
+  margin: 4px 0 0;
+  color: var(--c-text-sub);
+  font-size: 12px;
+}
+
+/* Glassmorphic Switches styling */
+.switch-container {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.switch-container input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: .3s;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px;
+  width: 16px;
+  left: 3px;
+  bottom: 3px;
+  background-color: rgba(255, 255, 255, 0.8);
+  transition: .3s;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+input:checked + .slider {
+  background-color: rgba(0, 198, 112, 0.2);
+  border-color: rgba(0, 198, 112, 0.4);
+}
+
+input:checked + .slider:before {
+  transform: translateX(24px);
+  background-color: var(--c-primary);
+}
+
+.slider.round {
+  border-radius: 34px;
+}
+
+.slider.round:before {
+  border-radius: 50%;
 }
 </style>

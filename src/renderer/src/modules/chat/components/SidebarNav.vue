@@ -7,6 +7,7 @@ const props = defineProps<{
   activeNav: MainNavKey
   userLabel: string
   discoverBadge?: number
+  connStatus?: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'auth_failed'
 }>()
 
 const emit = defineEmits<{
@@ -37,7 +38,10 @@ const userInitial = computed(() => {
 
 <template>
   <aside class="sidebar">
-    <header class="brand" title="LCchat">LC</header>
+    <header class="brand" title="LCchat">
+      LC
+      <span v-if="props.connStatus" class="status-dot" :class="'status-dot--' + props.connStatus" :title="'连接状态: ' + props.connStatus" />
+    </header>
 
     <nav class="nav">
       <button
@@ -85,6 +89,7 @@ const userInitial = computed(() => {
 }
 
 .brand {
+  position: relative;
   width: 44px;
   height: 44px;
   border-radius: var(--radius-md);
@@ -208,5 +213,40 @@ const userInitial = computed(() => {
   background: var(--c-bg-sidebar-active);
   border-color: rgba(255, 255, 255, 0.3);
   transform: translateY(-2px);
+}
+
+.status-dot {
+  position: absolute;
+  bottom: 0px;
+  right: 0px;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  border: 1.5px solid var(--c-bg-sidebar);
+  transition: all 0.3s ease;
+}
+
+.status-dot--connected {
+  background: var(--c-success);
+  box-shadow: 0 0 6px var(--c-success);
+}
+
+.status-dot--connecting,
+.status-dot--reconnecting {
+  background: var(--c-warning);
+  box-shadow: 0 0 6px var(--c-warning);
+  animation: pulse-dot 1.5s infinite;
+}
+
+.status-dot--idle,
+.status-dot--auth_failed {
+  background: var(--c-danger);
+  box-shadow: 0 0 6px var(--c-danger);
+}
+
+@keyframes pulse-dot {
+  0% { opacity: 0.4; }
+  50% { opacity: 1; }
+  100% { opacity: 0.4; }
 }
 </style>
