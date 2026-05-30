@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import SecurityCenterCard, {
   type ChangeEmailPayload,
   type ChangePasswordPayload,
@@ -10,8 +11,13 @@ import { useAppStore } from '../../../stores/app.store'
 import { Bell, Volume2 } from 'lucide-vue-next'
 
 const appStore = useAppStore()
+const isChiming = ref(false)
 
 function triggerTestChime() {
+  isChiming.value = true
+  setTimeout(() => {
+    isChiming.value = false
+  }, 450)
   try {
     const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
     if (!AudioContextClass) return
@@ -186,14 +192,23 @@ function getLastSeenText(value: string): string {
               <strong>音效试听与测试</strong>
               <p>即时合成并预览双音阶高保真毛玻璃系统提示音</p>
             </div>
-            <button
-              type="button"
-              class="action-btn action-btn--ghost flex items-center gap-2"
-              @click="triggerTestChime"
-            >
-              <Volume2 :size="14" />
-              测试提示音
-            </button>
+            <div class="flex items-center gap-3">
+              <div v-if="isChiming" class="waveform-visualizer">
+                <span class="bar bar-1"></span>
+                <span class="bar bar-2"></span>
+                <span class="bar bar-3"></span>
+                <span class="bar bar-4"></span>
+                <span class="bar bar-5"></span>
+              </div>
+              <button
+                type="button"
+                class="action-btn action-btn--ghost flex items-center gap-2"
+                @click="triggerTestChime"
+              >
+                <Volume2 :size="14" />
+                测试提示音
+              </button>
+            </div>
           </div>
         </div>
       </section>
@@ -272,11 +287,27 @@ function getLastSeenText(value: string): string {
 .blacklist-action-card,
 .notifications-section,
 .device-section {
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(0, 0, 0, 0.045);
   border-radius: var(--radius-xl);
-  background: var(--c-bg-panel-solid);
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--blur-md);
   padding: 24px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
+  box-shadow: 
+    0 12px 32px -10px rgba(0, 0, 0, 0.04), 
+    0 2px 8px -2px rgba(0, 0, 0, 0.02),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+.blacklist-action-card:hover,
+.notifications-section:hover,
+.device-section:hover {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 198, 112, 0.15);
+  box-shadow: 
+    0 16px 40px -12px rgba(0, 198, 112, 0.04), 
+    0 2px 10px -2px rgba(0, 0, 0, 0.03);
 }
 
 .blacklist-action-card h3,
@@ -492,38 +523,76 @@ function getLastSeenText(value: string): string {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  transition: .3s;
+  background-color: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  transition: all var(--duration-normal) var(--ease-out);
 }
 
 .slider:before {
   position: absolute;
   content: "";
-  height: 16px;
-  width: 16px;
-  left: 3px;
-  bottom: 3px;
-  background-color: rgba(255, 255, 255, 0.8);
-  transition: .3s;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  height: 18px;
+  width: 18px;
+  left: 2px;
+  bottom: 2px;
+  background-color: #fff;
+  transition: transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.2s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15), 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.switch-container:hover .slider {
+  background-color: rgba(0, 0, 0, 0.1);
 }
 
 input:checked + .slider {
-  background-color: rgba(0, 198, 112, 0.2);
-  border-color: rgba(0, 198, 112, 0.4);
+  background-color: var(--c-primary);
+  border-color: var(--c-primary-hover);
 }
 
 input:checked + .slider:before {
   transform: translateX(24px);
-  background-color: var(--c-primary);
+  background-color: #fff;
+  box-shadow: 0 2px 6px rgba(0, 198, 112, 0.2);
 }
 
 .slider.round {
-  border-radius: 34px;
+  border-radius: 24px;
 }
 
 .slider.round:before {
   border-radius: 50%;
+}
+
+.waveform-visualizer {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 20px;
+  padding: 0 4px;
+}
+
+.waveform-visualizer .bar {
+  width: 3px;
+  height: 4px;
+  background-color: var(--c-primary);
+  border-radius: 1.5px;
+  animation: bounce 0.45s ease-in-out infinite alternate;
+}
+
+.waveform-visualizer .bar-1 { animation-delay: 0.0s; height: 16px; }
+.waveform-visualizer .bar-2 { animation-delay: 0.1s; height: 12px; }
+.waveform-visualizer .bar-3 { animation-delay: 0.2s; height: 18px; }
+.waveform-visualizer .bar-4 { animation-delay: 0.05s; height: 10px; }
+.waveform-visualizer .bar-5 { animation-delay: 0.15s; height: 14px; }
+
+@keyframes bounce {
+  0% {
+    transform: scaleY(0.2);
+    opacity: 0.5;
+  }
+  100% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
 }
 </style>

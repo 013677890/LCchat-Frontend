@@ -1,6 +1,10 @@
+import avatarMe from '../../assets/avatar_me.png'
+import avatarFriend1 from '../../assets/avatar_friend1.png'
+
 interface ResolveAssetUrlOptions {
   apiBaseUrl?: string
   rewriteInternalHost?: boolean
+  fallbackType?: 'me' | 'friend'
 }
 
 const DEFAULT_API_BASE_URL = 'http://localhost:8080'
@@ -42,8 +46,16 @@ function isInternalHost(hostname: string): boolean {
   return normalized.endsWith('.local') || normalized.endsWith('.internal')
 }
 
-export function resolveAssetUrl(value: string, options: ResolveAssetUrlOptions = {}): string {
-  const normalized = value.trim()
+export function resolveAssetUrl(value: string | null | undefined, options: ResolveAssetUrlOptions = {}): string {
+  const normalized = (value || '').trim()
+  
+  if (normalized === 'default_me' || (!normalized && options.fallbackType === 'me')) {
+    return avatarMe
+  }
+  if (normalized === 'default_friend' || (!normalized && options.fallbackType === 'friend')) {
+    return avatarFriend1
+  }
+
   if (!normalized) {
     return ''
   }

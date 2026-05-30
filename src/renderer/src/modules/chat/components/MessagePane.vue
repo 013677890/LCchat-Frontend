@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
 import type { MessageRow } from '../../../shared/types/localdb'
 import { Copy, CornerUpLeft, MessageSquare, AlertCircle } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
@@ -56,13 +56,29 @@ function getSenderName(message: MessageRow): string {
   return uuid.substring(0, 8)
 }
 
+const repliedMessage = ref<MessageRow | null>(null)
+
+function handleDoubleClickBubble(message: MessageRow) {
+  if (message.status === 1) return
+  repliedMessage.value = message
+}
+
 function handleSend(): void {
   const text = draftProxy.value.trim()
   if (!text) {
     return
   }
 
-  emit('send', text)
+  if (repliedMessage.value) {
+    const sender = getSenderName(repliedMessage.value)
+    const quoteText = getText(repliedMessage.value)
+    // Create a beautiful standard blockquote format
+    const formattedText = `> **回复 @${sender}**: ${quoteText}\n\n${text}`
+    emit('send', formattedText)
+    repliedMessage.value = null
+  } else {
+    emit('send', text)
+  }
 }
 
 // ------ Permission Aware Recall Logic ------
@@ -121,9 +137,17 @@ function closeMessageMenu() {
   showMenu.value = false
 }
 
-function handleOutsideClick() {
+function handleOutsideClick(event: MouseEvent) {
   if (showMenu.value) {
     closeMessageMenu()
+  }
+  if (showEmojiPicker.value) {
+    const target = event.target as HTMLElement
+    const picker = document.querySelector('.emoji-picker-container')
+    const button = document.querySelector('.emoji-tool-btn')
+    if (picker && !picker.contains(target) && button && !button.contains(target)) {
+      showEmojiPicker.value = false
+    }
   }
 }
 
@@ -229,10 +253,253 @@ function emitResend(clientMsgId: string | undefined) {
 }
 
 const composerTools = [
-  { key: 'emoji', label: '表情', icon: ':-)' },
-  { key: 'image', label: '图片', icon: 'IMG' },
-  { key: 'file', label: '文件', icon: 'FILE' }
+  { key: 'emoji', label: '表情', icon: '😊' },
+  { key: 'image', label: '图片', icon: '🖼️' },
+  { key: 'file', label: '文件', icon: '📎' }
 ]
+
+// ------ Emoji Picker Core Logic ------
+const textareaRef = ref<HTMLTextAreaElement | null>(null)
+const showEmojiPicker = ref(false)
+const emojiSearchQuery = ref('')
+const activeEmojiTab = ref('表情')
+
+const emojiCategories = [
+  {
+    name: '表情',
+    icon: '😃',
+    emojis: [
+      { char: '😀', tags: 'smile happy laugh face 笑 哈哈 快乐' },
+      { char: '😃', tags: 'smile happy laugh face 笑 哈哈 快乐' },
+      { char: '😄', tags: 'smile happy laugh face 笑 哈哈 快乐' },
+      { char: '😁', tags: 'smile happy laugh face 笑 哈哈 快乐' },
+      { char: '😆', tags: 'smile happy laugh face 笑 哈哈 快乐' },
+      { char: '😅', tags: 'smile sweat happy laugh face 尴尬 笑 汗' },
+      { char: '😂', tags: 'smile cry tears laugh face 搞笑 笑哭了 欢喜' },
+      { char: '🤣', tags: 'smile roll tears laugh face 搞笑 爆笑' },
+      { char: '😊', tags: 'smile blush happy face 害羞 微笑 温暖' },
+      { char: '😇', tags: 'angel halo smile face 天使 善良' },
+      { char: '🙂', tags: 'smile face 微笑 呵呵' },
+      { char: '🙃', tags: 'upside down smile face 倒笑 调皮' },
+      { char: '😉', tags: 'wink smile face 眨眼 挑逗' },
+      { char: '😌', tags: 'relieved smile face 舒缓 宽慰' },
+      { char: '😍', tags: 'love heart eyes smile face 喜欢 爱心 眼镜 崇拜' },
+      { char: '🥰', tags: 'love hearts smile face 喜爱 温暖 幸福' },
+      { char: '😘', tags: 'love blow kiss smile face 亲亲 飞吻 爱' },
+      { char: '😗', tags: 'kiss smile face 亲亲 么么哒' },
+      { char: '😙', tags: 'kiss smile face 亲亲 么么哒' },
+      { char: '😚', tags: 'kiss blush smile face 亲亲 害羞 么么哒' },
+      { char: '😋', tags: 'yum delicious tongue smile face 好吃 馋 吐舌' },
+      { char: '😛', tags: 'tongue smile face 吐舌 调皮' },
+      { char: '😝', tags: 'tongue squint smile face 吐舌 鬼脸' },
+      { char: '😜', tags: 'tongue wink smile face 眨眼 吐舌 调皮' },
+      { char: '🤪', tags: 'zany crazy tongue face 疯狂 搞怪 鬼脸' },
+      { char: '🤨', tags: 'raised eyebrow face 疑惑 怀疑 挑眉' },
+      { char: '🧐', tags: 'monocle face 观察 学问 思考' },
+      { char: '🤓', tags: 'nerd glasses face 书呆子 极客 聪明' },
+      { char: '😎', tags: 'cool sunglasses face 酷 墨镜 帅' },
+      { char: '🤩', tags: 'star eyes smile face 崇拜 闪亮 惊喜' },
+      { char: '🥳', tags: 'party celebrate horn face 庆祝 派对 生日' },
+      { char: '😏', tags: 'smirk smile face 歪嘴笑 傲慢 坏笑' },
+      { char: '😒', tags: 'unamused face 鄙视 不满 翻白眼' },
+      { char: '😞', tags: 'disappointed face 失望 难过' },
+      { char: '😔', tags: 'pensive face 沉思 忧郁 悲伤' },
+      { char: '😟', tags: 'worried face 担心 焦虑' },
+      { char: '😕', tags: 'confused face 困惑 纠结' },
+      { char: '🙁', tags: 'frown face 难过 委屈' },
+      { char: '☹️', tags: 'frown face 伤心 沮丧' },
+      { char: '😣', tags: 'persevere face 坚持 痛苦' },
+      { char: '😖', tags: 'confounded face 狼狈 抓狂' },
+      { char: '😫', tags: 'tired face 累 疲惫' },
+      { char: '😩', tags: 'weary face 疲倦 烦躁' },
+      { char: '🥺', tags: 'pleading beg eyes face 可怜 恳求 撒娇' },
+      { char: '😢', tags: 'cry tear sad face 流泪 伤心 哭' },
+      { char: '😭', tags: 'cry sob loud tears sad face 大哭 伤心 流泪' },
+      { char: '😤', tags: 'triumph steam angry face 生气 傲娇 哼' },
+      { char: '😠', tags: 'angry mad face 生气 愤怒' },
+      { char: '😡', tags: 'pout angry mad face 愤怒 暴怒 火大' },
+      { char: '🤬', tags: 'swear curse mouth face 骂人 爆粗口 极其愤怒' },
+      { char: '🤯', tags: 'explode head shock face 震惊 脑洞大开 懵了' },
+      { char: '😳', tags: 'flushed blush shock face 脸红 尴尬 震惊' },
+      { char: '🥵', tags: 'hot red sweat face 炎热 燥热 脸红 害羞' },
+      { char: '🥶', tags: 'cold blue teeth face 寒冷 冻结 害怕' },
+      { char: '😱', tags: 'scream fear shock face 恐惧 尖叫 震惊 吓死了' },
+      { char: '🤫', tags: 'shush finger quiet face 安静 嘘 秘密' },
+      { char: '🤐', tags: 'zipper mouth silent face 闭嘴 保密' },
+      { char: '😴', tags: 'sleep zzz snoring face 睡觉 困了 晚安' }
+    ]
+  },
+  {
+    name: '手势',
+    icon: '👋',
+    emojis: [
+      { char: '👋', tags: 'wave hello goodbye hand 招手 你好 再见' },
+      { char: '👌', tags: 'ok hand fine good 好的 没问题 赞' },
+      { char: '✌️', tags: 'victory peace fingers hand 耶 胜利 剪刀手' },
+      { char: '👍', tags: 'thumbs up agree good hand 点赞 棒 顶' },
+      { char: '👎', tags: 'thumbs down disagree bad hand 差评 弱 踩' },
+      { char: '✊', tags: 'raised fist power hand 力量 拳头 奋斗' },
+      { char: '👊', tags: 'oncoming fist punch hand 拳头 击掌 力量' },
+      { char: '👏', tags: 'clap hands applause 鼓掌 赞扬 热烈' },
+      { char: '🙌', tags: 'raise hands celebrate 欢呼 举双手 万岁' },
+      { char: '🙏', tags: 'pray hands please thank you 祈祷 拜托 谢谢 感恩' },
+      { char: '💪', tags: 'muscle biceps strength power 肌肉 力量 加油' }
+    ]
+  },
+  {
+    name: '爱心',
+    icon: '❤️',
+    emojis: [
+      { char: '❤️', tags: 'love red heart 爱心 喜欢 红色' },
+      { char: '🧡', tags: 'love orange heart 橙色 喜欢' },
+      { char: '💛', tags: 'love yellow heart 黄色 喜欢' },
+      { char: '💚', tags: 'love green heart 绿色 喜欢' },
+      { char: '💙', tags: 'love blue heart 蓝色 喜欢' },
+      { char: '💜', tags: 'love purple heart 紫色 喜欢' },
+      { char: '🖤', tags: 'love black heart 黑色' },
+      { char: '🤍', tags: 'love white heart 白色' },
+      { char: '💔', tags: 'broken heart sad 伤心 心碎' },
+      { char: '💖', tags: 'love sparkling heart 闪烁 爱心' },
+      { char: '💗', tags: 'love growing heart 激动 喜欢' },
+      { char: '💓', tags: 'love beating heart 心动 跳动' },
+      { char: '💕', tags: 'love two hearts 双向 喜欢' },
+      { char: '✨', tags: 'sparkles stars shine 闪亮 星星 闪烁' },
+      { char: '⭐', tags: 'star gold yellow 星星 金色' },
+      { char: '🔥', tags: 'fire hot burn flame 火 火热 热门 激情' },
+      { char: '🎉', tags: 'party popper celebrate 恭喜 庆祝 洒花 派对' },
+      { char: '🎁', tags: 'present gift box 礼物 惊喜 送礼' }
+    ]
+  }
+]
+
+const filteredEmojis = computed(() => {
+  const query = emojiSearchQuery.value.trim().toLowerCase()
+  if (!query) {
+    const category = emojiCategories.find(c => c.name === activeEmojiTab.value)
+    return category ? category.emojis : []
+  }
+
+  // Flatten and filter across all categories
+  const allEmojis = emojiCategories.flatMap(c => c.emojis)
+  // Deduplicate and filter
+  const seen = new Set<string>()
+  const results: typeof allEmojis = []
+  for (const item of allEmojis) {
+    if (!seen.has(item.char) && item.tags.toLowerCase().includes(query)) {
+      seen.add(item.char)
+      results.push(item)
+    }
+  }
+  return results
+})
+
+function toggleEmojiPicker() {
+  showEmojiPicker.value = !showEmojiPicker.value
+  if (showEmojiPicker.value) {
+    emojiSearchQuery.value = ''
+  }
+}
+
+function insertEmoji(emojiChar: string) {
+  if (!textareaRef.value) {
+    draftProxy.value += emojiChar
+    return
+  }
+
+  const el = textareaRef.value
+  const startPos = el.selectionStart
+  const endPos = el.selectionEnd
+  const text = draftProxy.value
+
+  draftProxy.value = text.substring(0, startPos) + emojiChar + text.substring(endPos)
+  
+  // Restore focus and cursor position after insertion
+  const newCaretPos = startPos + emojiChar.length
+  setTimeout(() => {
+    el.focus()
+    el.setSelectionRange(newCaretPos, newCaretPos)
+  }, 0)
+}
+
+// ------ Timeline Divider Helpers ------
+function shouldShowDivider(index: number): boolean {
+  if (index === 0) return true
+  const currentMsg = props.messages[index]
+  const prevMsg = props.messages[index - 1]
+  if (!currentMsg || !prevMsg) return false
+  
+  // 1. Sent on a different calendar day
+  const currentDate = new Date(currentMsg.sendTime)
+  const prevDate = new Date(prevMsg.sendTime)
+  if (currentDate.toDateString() !== prevDate.toDateString()) {
+    return true
+  }
+
+  // 2. Sent more than 5 minutes apart (300,000 milliseconds)
+  const timeDiff = currentMsg.sendTime - prevMsg.sendTime
+  if (timeDiff > 300000) {
+    return true
+  }
+
+  return false
+}
+
+function formatDividerTime(timestamp: number): string {
+  const date = new Date(timestamp)
+  const today = new Date()
+  const yesterday = new Date(today)
+  yesterday.setDate(today.getDate() - 1)
+
+  const timeText = date.toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+
+  if (date.toDateString() === today.toDateString()) {
+    return `今天 ${timeText}`
+  } else if (date.toDateString() === yesterday.toDateString()) {
+    return `昨天 ${timeText}`
+  } else {
+    return `${date.getFullYear()}年${date.getMonth() + 1}月${date.getDate()}日 ${timeText}`
+  }
+}
+
+// ------ Bubble Quick Actions Helpers ------
+function triggerQuickCopy(text: string) {
+  navigator.clipboard.writeText(text)
+  toast.success('已复制到剪贴板')
+}
+
+function triggerQuickRecall(msgId: string) {
+  emit('recallMessage', msgId)
+}
+
+function handleToolClick(key: string) {
+  if (key === 'emoji') {
+    toggleEmojiPicker()
+  } else if (key === 'image') {
+    toast.info('为了保障端到端加密通道的安全与速度，目前仅支持文本聊天，您可以通过直接拖拽或粘贴文本/代码文件来极速导入！')
+  } else if (key === 'file') {
+    toast.info('您可以通过直接拖拽文本/代码文件，或复制文件粘贴在编辑框内，系统将自动极速识别并导入！')
+  }
+}
+
+const isTyping = ref(false)
+let typingTimeout: any = null
+
+watch(draftProxy, () => {
+  if (!draftProxy.value) {
+    isTyping.value = false
+    return
+  }
+  isTyping.value = true
+  if (typingTimeout) {
+    clearTimeout(typingTimeout)
+  }
+  typingTimeout = setTimeout(() => {
+    isTyping.value = false
+  }, 1000)
+})
 </script>
 
 <template>
@@ -251,7 +518,12 @@ const composerTools = [
     <main class="history">
       <p v-if="props.messages.length === 0" class="empty">暂无消息，发送一条开始聊天。</p>
       <div v-else class="message-list">
-        <template v-for="message in props.messages" :key="message.msgId">
+        <template v-for="(message, index) in props.messages" :key="message.msgId">
+          <!-- Center Timeline Divider Badge -->
+          <div v-if="shouldShowDivider(index)" class="timeline-divider">
+            <span>{{ formatDividerTime(message.sendTime) }}</span>
+          </div>
+
           <!-- A. Recalled System notice -->
           <div v-if="message.status === 1" class="recalled-notice">
             <span>{{ getText(message) }}</span>
@@ -267,7 +539,28 @@ const composerTools = [
               <span v-if="props.isGroup && getFrom(message) === 'peer'" class="sender-name">
                 {{ getSenderName(message) }}
               </span>
-              <div class="bubble-wrapper">
+              <div class="bubble-wrapper group relative">
+                <!-- Floating Glassmorphic Quick Action Bar -->
+                <div class="bubble-action-bar">
+                  <button 
+                    type="button" 
+                    class="action-btn" 
+                    title="复制文本"
+                    @click="triggerQuickCopy(getText(message))"
+                  >
+                    <Copy :size="12" />
+                  </button>
+                  <button 
+                    v-if="canRecall(message)"
+                    type="button" 
+                    class="action-btn action-btn--danger" 
+                    title="撤回消息"
+                    @click="triggerQuickRecall(message.msgId)"
+                  >
+                    <CornerUpLeft :size="12" />
+                  </button>
+                </div>
+
                 <button
                   v-if="message.status === -1"
                   type="button"
@@ -278,8 +571,9 @@ const composerTools = [
                   <AlertCircle class="alert-icon" :size="18" />
                 </button>
                 <div 
-                  class="bubble"
+                  class="bubble cursor-pointer"
                   @contextmenu="openMessageMenu($event, message)"
+                  @dblclick="handleDoubleClickBubble(message)"
                 >
                   <p class="message-content-html" v-html="renderMarkdown(getText(message))"></p>
                   <time>{{ getTime(message) }}</time>
@@ -291,15 +585,101 @@ const composerTools = [
       </div>
     </main>
 
-    <footer class="composer">
+    <footer class="composer relative">
+      <!-- Glassmorphic Reply Quote Card -->
+      <transition name="slide-up">
+        <div v-if="repliedMessage" class="reply-quote-card flex items-center justify-between px-6 py-3.5 border-b border-neutral-100 bg-white/70 backdrop-blur-md">
+          <div class="flex items-center gap-3 overflow-hidden">
+            <span class="reply-accent-bar" />
+            <div class="flex flex-col text-left overflow-hidden">
+              <span class="text-xs font-bold text-[var(--c-primary)] tracking-wide">
+                回复 @{{ getSenderName(repliedMessage) }}
+              </span>
+              <span class="text-xs text-neutral-500 truncate max-w-[400px] mt-0.5">
+                {{ getText(repliedMessage) }}
+              </span>
+            </div>
+          </div>
+          <button 
+            type="button" 
+            class="p-1 rounded-full text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 transition duration-150"
+            title="取消回复"
+            @click="repliedMessage = null"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      </transition>
+
+      <!-- Curated Glassmorphic Emoji Picker Drawer -->
+      <transition name="slide-fade">
+        <div v-if="showEmojiPicker" class="emoji-picker-container shadow-float">
+          <!-- Search box -->
+          <div class="emoji-picker-search">
+            <Search :size="13" class="search-icon" />
+            <input 
+              v-model="emojiSearchQuery" 
+              type="text" 
+              placeholder="搜索表情名称(如:笑,心,smile)..." 
+              class="search-input"
+            />
+            <button v-if="emojiSearchQuery" type="button" class="search-clear" @click="emojiSearchQuery = ''">
+              <X :size="13" />
+            </button>
+          </div>
+          
+          <!-- Emojis Grid -->
+          <div class="emoji-grid scrollbar-thin">
+            <button 
+              v-for="emoji in filteredEmojis" 
+              :key="emoji.char" 
+              type="button" 
+              class="emoji-item"
+              :title="emoji.tags"
+              @click="insertEmoji(emoji.char)"
+            >
+              {{ emoji.char }}
+            </button>
+            <div v-if="filteredEmojis.length === 0" class="emoji-empty">
+              没有找到匹配的表情
+            </div>
+          </div>
+
+          <!-- Categories Tabs -->
+          <div v-if="!emojiSearchQuery" class="emoji-picker-tabs">
+            <button 
+              v-for="cat in emojiCategories" 
+              :key="cat.name"
+              type="button"
+              class="cat-tab"
+              :class="{ 'cat-tab--active': activeEmojiTab === cat.name }"
+              @click="activeEmojiTab = cat.name"
+            >
+              <span>{{ cat.icon }}</span>
+              <small>{{ cat.name }}</small>
+            </button>
+          </div>
+        </div>
+      </transition>
+
       <div class="tool-row">
-        <button v-for="tool in composerTools" :key="tool.key" type="button" :title="tool.label">
+        <button 
+          v-for="tool in composerTools" 
+          :key="tool.key" 
+          type="button" 
+          :title="tool.label"
+          :class="{ 'emoji-tool-btn': tool.key === 'emoji' }"
+          @click="handleToolClick(tool.key)"
+        >
           <span>{{ tool.icon }}</span>
           <small>{{ tool.label }}</small>
         </button>
       </div>
       <div class="textarea-wrap">
         <textarea
+          ref="textareaRef"
           v-model="draftProxy"
           placeholder="输入消息，Enter 换行，点击发送提交，支持拖拽或粘贴文本文件..."
           rows="4"
@@ -310,7 +690,11 @@ const composerTools = [
         <button type="button" class="send-btn" @click="handleSend">发送</button>
       </div>
       <div class="composer-actions">
-        <span>Enter 换行，点击发送按钮提交消息</span>
+        <span class="flex items-center gap-1.5 text-neutral-400">
+          <span class="indicator-lock-dot" :class="{ 'indicator-lock-dot--typing': isTyping }"></span>
+          <span>{{ isTyping ? '加密草稿已存至安全缓存' : '端到端加密安全会话' }}</span>
+        </span>
+        <span>Enter 换行，Enter/发送提交</span>
       </div>
     </footer>
 
@@ -478,31 +862,37 @@ const composerTools = [
 }
 
 .bubble {
-  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) 4px;
-  padding: 12px 16px;
-  background: var(--c-bg-panel-solid);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03), 0 1px 3px rgba(0, 0, 0, 0.04);
+  border-radius: 16px 16px 16px 0; /* Asymmetric bottom-left tail for peer */
+  padding: 11px 15px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  border: 1px solid rgba(0, 0, 0, 0.035);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.015);
   position: relative;
-  transition: transform var(--duration-fast) var(--ease-out);
+  transition: all var(--duration-fast) var(--ease-out);
 }
 
 .bubble:hover {
   transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.03);
 }
 
 .bubble-row--self .bubble {
-  background: linear-gradient(135deg, var(--c-primary) 0%, #00AE62 100%);
+  background: linear-gradient(135deg, #00d67a 0%, #00b164 100%);
   color: #fff;
-  border-radius: var(--radius-lg) var(--radius-lg) 4px var(--radius-lg);
-  box-shadow: 0 6px 16px rgba(0, 198, 112, 0.15), 0 2px 4px rgba(0, 198, 112, 0.08);
+  border-radius: 16px 16px 0 16px; /* Asymmetric bottom-right tail for self */
+  box-shadow: 0 4px 14px rgba(0, 198, 112, 0.15);
   border: none;
+}
+
+.bubble-row--self .bubble:hover {
+  box-shadow: 0 6px 20px rgba(0, 198, 112, 0.22);
 }
 
 .bubble p {
   margin: 0;
   color: inherit;
   line-height: 1.6;
-  font-size: 14px;
+  font-size: 13.5px;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -514,9 +904,16 @@ const composerTools = [
 .bubble time {
   display: block;
   text-align: right;
-  margin-top: 6px;
-  font-size: 11px;
-  opacity: 0.6;
+  margin-top: 5px;
+  font-size: 10px;
+  font-weight: 500;
+  opacity: 0.75;
+  color: var(--c-text-muted);
+  user-select: none;
+}
+
+.bubble-row--self .bubble time {
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .recalled-notice {
@@ -790,5 +1187,314 @@ const composerTools = [
 .bubble-row--self :deep(.markdown-link) {
   color: #e2f9ee;
   text-decoration: underline;
+}
+
+/* Date & Time Timeline Dividers */
+.timeline-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 16px 0;
+  width: 100%;
+}
+
+.timeline-divider span {
+  font-size: 11px;
+  color: var(--c-text-sub);
+  background: rgba(0, 0, 0, 0.04);
+  backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--blur-md);
+  padding: 4px 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid rgba(0, 0, 0, 0.02);
+  user-select: none;
+  font-weight: 500;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Floating Bubble Hover Action Menu */
+.bubble-action-bar {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%) scale(0.95);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 5;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.bubble-row--self .bubble-action-bar {
+  left: -52px;
+}
+
+.bubble-row:not(.bubble-row--self) .bubble-action-bar {
+  right: -52px;
+}
+
+.bubble-wrapper:hover .bubble-action-bar {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+  pointer-events: auto;
+}
+
+.action-btn {
+  border: none;
+  background: transparent;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--c-text-sub);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.action-btn:hover {
+  background: var(--c-primary-soft);
+  color: var(--c-primary-active);
+  transform: scale(1.05);
+}
+
+.action-btn--danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: var(--c-danger);
+}
+
+/* Glassmorphic Emoji Picker Container */
+.emoji-picker-container {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 12px;
+  width: 320px;
+  height: 310px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+  overflow: hidden;
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.15), 0 8px 16px -8px rgba(0, 0, 0, 0.1);
+  transform-origin: bottom left;
+}
+
+.emoji-picker-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.02);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  padding: 8px 12px;
+}
+
+.emoji-picker-search .search-icon {
+  color: var(--c-text-muted);
+}
+
+.emoji-picker-search .search-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 12px;
+  color: var(--c-text-main);
+  flex: 1;
+  padding: 0;
+}
+
+.emoji-picker-search .search-clear {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: var(--c-text-muted);
+  padding: 2px;
+  border-radius: var(--radius-full);
+}
+
+.emoji-picker-search .search-clear:hover {
+  background: var(--c-bg-hover);
+}
+
+.emoji-grid {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  align-content: start;
+}
+
+.emoji-item {
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.emoji-item:hover {
+  background: var(--c-primary-soft);
+  transform: scale(1.18);
+}
+
+.emoji-empty {
+  grid-column: span 7;
+  text-align: center;
+  padding: 32px 0;
+  font-size: 12px;
+  color: var(--c-text-muted);
+}
+
+.emoji-picker-tabs {
+  display: flex;
+  align-items: center;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.5);
+  padding: 4px;
+  justify-content: space-around;
+}
+
+.cat-tab {
+  border: none;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 10px;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: all var(--duration-fast) var(--ease-out);
+  color: var(--c-text-muted);
+}
+
+.cat-tab:hover {
+  background: var(--c-bg-hover);
+  color: var(--c-text-main);
+}
+
+.cat-tab--active {
+  background: var(--c-primary-soft) !important;
+  color: var(--c-primary-active) !important;
+}
+
+.cat-tab span {
+  font-size: 16px;
+}
+
+.cat-tab small {
+  font-size: 9px;
+  font-weight: 600;
+}
+
+/* Emoji Picker Slide Transition */
+.slide-fade-enter-active {
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.slide-fade-leave-active {
+  transition: all 0.18s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.slide-fade-enter-from {
+  opacity: 0;
+  transform: scale(0.85) translateY(12px);
+}
+
+.slide-fade-leave-to {
+  opacity: 0;
+  transform: scale(0.9) translateY(8px);
+}
+
+/* Glassmorphic Reply Card */
+.reply-quote-card {
+  position: relative;
+  z-index: 10;
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+}
+
+.reply-accent-bar {
+  width: 3px;
+  height: 24px;
+  background-color: var(--c-primary);
+  border-radius: 1.5px;
+  box-shadow: 0 0 6px var(--c-primary);
+}
+
+/* Pulse Typing Heartbeat Lock */
+.indicator-lock-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background-color: var(--c-primary);
+  opacity: 0.65;
+  transition: all 0.3s ease;
+}
+
+.indicator-lock-dot--typing {
+  background-color: #00E583;
+  opacity: 1;
+  box-shadow: 0 0 8px #00E583;
+  animation: typing-heartbeat 0.8s infinite ease-in-out;
+}
+
+@keyframes typing-heartbeat {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.3);
+    opacity: 1;
+  }
+}
+
+/* Blockquote inside Message bubble */
+.bubble p.message-content-html :deep(blockquote) {
+  border-left: 3px solid var(--c-primary);
+  background: rgba(0, 198, 112, 0.05);
+  padding: 6px 12px;
+  margin: 6px 0;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 12.5px;
+  color: var(--c-text-sub);
+}
+
+.bubble-row--self .bubble p.message-content-html :deep(blockquote) {
+  border-left-color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.95);
+}
+
+/* Slide Up Transition for Quote Card */
+.slide-up-enter-active,
+.slide-up-leave-active {
+  transition: all 0.3s var(--ease-spring);
+}
+
+.slide-up-enter-from,
+.slide-up-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
 }
 </style>

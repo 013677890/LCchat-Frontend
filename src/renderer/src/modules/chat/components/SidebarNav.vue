@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { MessageCircle, Users, Compass, Settings, LogOut } from 'lucide-vue-next'
 import type { MainNavKey } from '../../../stores/app.store'
 
 const props = defineProps<{
   activeNav: MainNavKey
   userLabel: string
+  avatarUrl?: string
   discoverBadge?: number
   connStatus?: 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'auth_failed'
 }>()
@@ -34,6 +35,94 @@ const userInitial = computed(() => {
   }
   return normalized.slice(0, 1).toUpperCase()
 })
+
+const activeNavIndex = computed(() => {
+  return navItems.findIndex(item => item.key === props.activeNav)
+})
+
+const particleCanvasRef = ref<HTMLCanvasElement | null>(null)
+
+function explodeParticles() {
+  const canvas = particleCanvasRef.value
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  canvas.width = 120
+  canvas.height = 120
+
+  const centerX = 60
+  const centerY = 60
+
+  interface Particle {
+    x: number
+    y: number
+    vx: number
+    vy: number
+    size: number
+    color: string
+    alpha: number
+    decay: number
+  }
+
+  const particles: Particle[] = []
+  const colors = ['#00C670', '#00E583', '#34D399', '#10B981', '#6EE7B7'] as const
+
+  for (let i = 0; i < 28; i++) {
+    const angle = Math.random() * Math.PI * 2
+    const speed = Math.random() * 3 + 2
+    particles.push({
+      x: centerX,
+      y: centerY,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      size: Math.random() * 3 + 2,
+      color: colors[Math.floor(Math.random() * colors.length)] as string,
+      alpha: 1,
+      decay: Math.random() * 0.03 + 0.015
+    })
+  }
+
+  function animate() {
+    if (particles.length === 0) return
+    const currentCtx = ctx
+    const currentCanvas = canvas
+    if (!currentCtx || !currentCanvas) return
+
+    currentCtx.clearRect(0, 0, currentCanvas.width, currentCanvas.height)
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i]
+      if (!p) continue
+
+      p.x += p.vx
+      p.y += p.vy
+      p.alpha -= p.decay
+
+      if (p.alpha <= 0) {
+        particles.splice(i, 1)
+        continue
+      }
+
+      currentCtx.save()
+      currentCtx.globalAlpha = p.alpha
+      currentCtx.fillStyle = p.color
+      currentCtx.beginPath()
+      currentCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2)
+      currentCtx.fill()
+      currentCtx.restore()
+    }
+
+    requestAnimationFrame(animate)
+  }
+
+  animate()
+}
+
+function handleAvatarClick() {
+  explodeParticles()
+  emit('clickAvatar')
+}
 </script>
 
 <template>
@@ -44,6 +133,10 @@ const userInitial = computed(() => {
     </header>
 
     <nav class="nav">
+      <div 
+        class="nav-indicator-pill"
+        :style="{ transform: `translateY(${activeNavIndex * 60}px)` }"
+      />
       <button
         v-for="item in navItems"
         :key="item.key"
@@ -61,9 +154,13 @@ const userInitial = computed(() => {
     </nav>
 
     <footer class="sidebar-footer">
-      <button class="profile-btn" type="button" :title="props.userLabel" @click="emit('clickAvatar')">
-        {{ userInitial }}
-      </button>
+      <div class="profile-container relative">
+        <canvas ref="particleCanvasRef" class="particle-canvas" />
+        <button class="profile-btn" type="button" :title="props.userLabel" @click="handleAvatarClick">
+          <img v-if="props.avatarUrl" :src="props.avatarUrl" class="profile-btn-img" alt="avatar" />
+          <span v-else>{{ userInitial }}</span>
+        </button>
+      </div>
       <button class="logout" type="button" title="退出登录" @click="emit('logout')">
         <LogOut :size="20" stroke-width="2.2" />
       </button>
@@ -124,30 +221,42 @@ const userInitial = computed(() => {
   display: grid;
   place-items: center;
   transition: all var(--duration-fast) var(--ease-out);
+  z-index: 2;
 }
 
 .nav-item:hover {
   color: #fff;
-  background: var(--c-bg-sidebar-active);
   transform: translateY(-2px);
 }
 
 .nav-item--active {
-  color: var(--c-primary);
-  background: rgba(0, 198, 112, 0.15);
-  box-shadow: inset 4px 0 0 var(--c-primary);
-  /* 使用伪元素制作更柔和的选中高亮 */
+  color: var(--c-primary) !important;
 }
 
-.nav-item--active::before {
+.nav-indicator-pill {
+  position: absolute;
+  top: 0;
+  left: 6px;
+  width: 48px;
+  height: 48px;
+  background: rgba(0, 198, 112, 0.12);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 198, 112, 0.08);
+  pointer-events: none;
+  transition: transform 0.38s cubic-bezier(0.34, 1.66, 0.64, 1);
+  z-index: 1;
+}
+
+.nav-indicator-pill::before {
   content: '';
   position: absolute;
-  left: -8px;
+  left: -14px;
+  top: 12px;
+  width: 3px;
   height: 24px;
-  width: 4px;
   border-radius: 0 4px 4px 0;
   background: var(--c-primary);
-  opacity: 0; /* 根据需要也可以用这种方式代替 box-shadow */
+  box-shadow: 0 0 8px var(--c-primary);
 }
 
 .nav-icon {
@@ -201,6 +310,19 @@ const userInitial = computed(() => {
   background: var(--c-primary-soft);
   border-color: rgba(0, 198, 112, 0.3);
   color: var(--c-primary);
+  padding: 0;
+  overflow: hidden;
+}
+
+.profile-btn-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.profile-btn:hover .profile-btn-img {
+  transform: scale(1.1);
 }
 
 .profile-btn:hover {
@@ -248,5 +370,24 @@ const userInitial = computed(() => {
   0% { opacity: 0.4; }
   50% { opacity: 1; }
   100% { opacity: 0.4; }
+}
+
+.profile-container {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+}
+
+.particle-canvas {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 10;
 }
 </style>

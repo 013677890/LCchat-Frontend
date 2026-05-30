@@ -278,50 +278,81 @@ function handleSubmitDelete(): void {
 
 <style scoped>
 .security-card {
-  border: 1px solid var(--c-border);
-  border-radius: 14px;
-  background: #fff;
-  padding: 14px;
-  box-shadow: var(--shadow-1);
+  border: 1px solid rgba(0, 0, 0, 0.045);
+  border-radius: var(--radius-xl);
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--blur-md);
+  padding: 24px;
+  box-shadow: 
+    0 12px 32px -10px rgba(0, 0, 0, 0.04), 
+    0 2px 8px -2px rgba(0, 0, 0, 0.02),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transition: all var(--duration-normal) var(--ease-out);
+}
+
+.security-card:hover {
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 198, 112, 0.15);
+  box-shadow: 
+    0 16px 40px -12px rgba(0, 198, 112, 0.04), 
+    0 2px 10px -2px rgba(0, 0, 0, 0.03);
 }
 
 .security-header h3 {
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
+  font-weight: 700;
   color: var(--c-text-main);
 }
 
 .security-header p {
   margin: 6px 0 0;
-  color: var(--c-text-muted);
-  font-size: 12px;
+  color: var(--c-text-sub);
+  font-size: 13px;
+  font-weight: 500;
 }
 
 .security-grid {
-  margin-top: 10px;
+  margin-top: 18px;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 16px;
 }
 
 .block {
-  border: 1px solid var(--c-border);
-  border-radius: 10px;
-  padding: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.045);
+  border-radius: var(--radius-lg);
+  padding: 16px;
   display: grid;
-  gap: 8px;
-  background: #fafbfc;
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.015);
+  align-content: start;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.block:hover {
+  background: #fff;
+  border-color: rgba(0, 198, 112, 0.15);
+  box-shadow: var(--shadow-sm);
 }
 
 .block h4 {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 700;
   color: var(--c-text-main);
 }
 
 .block--danger {
-  border-color: rgba(245, 63, 63, 0.28);
-  background: #fff7f7;
+  border-color: rgba(245, 63, 63, 0.15);
+  background: rgba(245, 63, 63, 0.02);
+}
+
+.block--danger:hover {
+  background: #fff;
+  border-color: rgba(245, 63, 63, 0.3);
+  box-shadow: 0 4px 12px rgba(245, 63, 63, 0.05);
 }
 
 .danger-note {
@@ -329,6 +360,7 @@ function handleSubmitDelete(): void {
   font-size: 12px;
   color: #b02222;
   line-height: 1.5;
+  opacity: 0.85;
 }
 
 .field {
@@ -339,21 +371,32 @@ function handleSubmitDelete(): void {
 .field span {
   color: var(--c-text-sub);
   font-size: 12px;
+  font-weight: 600;
+  margin-left: 2px;
 }
 
 .field input {
-  border: 1px solid var(--c-border);
-  border-radius: 8px;
-  height: 36px;
-  padding: 0 10px;
+  border: 1.5px solid rgba(0, 0, 0, 0.08);
+  border-radius: var(--radius-md);
+  height: 38px;
+  padding: 0 12px;
   font-size: 13px;
   color: var(--c-text-main);
-  background: #fff;
+  background: rgba(255, 255, 255, 0.5);
   outline: none;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.field input:hover {
+  background: #fff;
+  border-color: rgba(0, 198, 112, 0.3);
 }
 
 .field input:focus {
+  background: #fff;
   border-color: var(--c-primary);
+  box-shadow: 0 0 0 3px var(--c-primary-soft);
+  transform: translateY(-0.5px);
 }
 
 .code-row {
@@ -369,58 +412,90 @@ function handleSubmitDelete(): void {
 
 .btn {
   border: 1px solid transparent;
-  border-radius: 8px;
-  height: 36px;
-  padding: 0 12px;
+  border-radius: var(--radius-md);
+  height: 38px;
+  padding: 0 16px;
   font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.15s ease-out;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--duration-fast) var(--ease-out);
 }
 
 .btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: none !important;
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .btn--ghost {
   color: var(--c-text-sub);
-  background: #fff;
-  border-color: var(--c-border);
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(0, 0, 0, 0.08);
 }
 
 .btn--ghost:hover:not(:disabled) {
-  border-color: #c7ced7;
+  background: #fff;
+  border-color: var(--c-primary);
+  color: var(--c-primary-active);
 }
 
 .btn--primary {
   color: #fff;
   background: var(--c-primary);
+  box-shadow: 0 2px 6px rgba(0, 198, 112, 0.2);
 }
 
 .btn--primary:hover:not(:disabled) {
   background: var(--c-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(0, 198, 112, 0.3);
 }
 
 .btn--danger {
   color: #fff;
   background: var(--c-danger);
+  box-shadow: 0 2px 6px rgba(255, 77, 79, 0.2);
 }
 
 .btn--danger:hover:not(:disabled) {
-  opacity: 0.9;
+  background: #f5222d;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(255, 77, 79, 0.3);
 }
 
 .feedback {
-  margin: 10px 0 0;
-  font-size: 12px;
+  margin: 14px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  text-align: center;
+  animation: feedbackSlide 0.2s var(--ease-spring) forwards;
+}
+
+@keyframes feedbackSlide {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .feedback--ok {
-  color: var(--c-success);
+  background: rgba(82, 196, 26, 0.08);
+  color: #389e0d;
+  border: 1px solid rgba(82, 196, 26, 0.15);
 }
 
 .feedback--err {
-  color: var(--c-danger);
+  background: rgba(255, 77, 79, 0.08);
+  color: #cf1322;
+  border: 1px solid rgba(255, 77, 79, 0.15);
 }
 
 @media (max-width: 1199px) {

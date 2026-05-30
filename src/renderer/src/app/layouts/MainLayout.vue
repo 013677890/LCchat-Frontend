@@ -58,6 +58,10 @@ const userLabel = computed(() => {
   return authStore.userUuid || 'U'
 })
 
+const userAvatarUrl = computed(() => {
+  return resolveAssetUrl(profile.value?.payload?.avatar as string, { fallbackType: 'me' })
+})
+
 function handleNavChange(nextNav: MainNavKey) {
   if (nextNav === 'chat') {
     router.push('/')
@@ -178,6 +182,7 @@ onMounted(async () => {
     <SidebarNav
       :active-nav="activeNav"
       :user-label="userLabel"
+      :avatar-url="userAvatarUrl"
       :discover-badge="applyStore.unreadCount"
       :conn-status="connStatus"
       @select="handleNavChange"

@@ -507,8 +507,9 @@ async function handleRemoveFromBlacklist() {
 
       <!-- Scrollable Cards Box -->
       <div class="list-body scrollbar-thin">
-        <SkeletonLoader v-if="loading" type="contact" :count="4" />
-        <!-- Friends List -->
+        <template v-if="loading">
+          <SkeletonLoader type="contact" :count="4" />
+        </template>
         <template v-else-if="activeTab === 'friends'">
           <div v-if="filteredFriends.length === 0" class="no-items">
             没有匹配的好友
@@ -544,8 +545,6 @@ async function handleRemoveFromBlacklist() {
             </div>
           </button>
         </template>
-
-        <!-- Applies List -->
         <template v-else-if="activeTab === 'applies'">
           <div v-if="filteredApplies.length === 0" class="no-items">
             暂无申请记录
@@ -588,9 +587,7 @@ async function handleRemoveFromBlacklist() {
             </div>
           </button>
         </template>
-
-        <!-- Groups List -->
-        <template v-slot:default v-else-if="activeTab === 'groups'">
+        <template v-else-if="activeTab === 'groups'">
           <div v-if="filteredGroups.length === 0" class="no-items">
             没有匹配的群聊
           </div>
@@ -621,8 +618,6 @@ async function handleRemoveFromBlacklist() {
             </div>
           </button>
         </template>
-
-        <!-- Blacklist List -->
         <template v-else-if="activeTab === 'blacklist'">
           <div v-if="filteredBlacklist.length === 0" class="no-items">
             黑名单为空

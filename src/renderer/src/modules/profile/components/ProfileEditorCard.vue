@@ -368,7 +368,7 @@ function handleSubmit(): void {
 .form-grid {
   margin-top: 24px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(240px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
   gap: 16px;
 }
 

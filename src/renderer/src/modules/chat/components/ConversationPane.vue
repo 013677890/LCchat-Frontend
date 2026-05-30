@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { Bell, BellOff, Pin, PinOff, Trash2 } from 'lucide-vue-next'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { Bell, BellOff, Pin, PinOff, Trash2, Search, X } from 'lucide-vue-next'
 import SkeletonLoader from '../../../shared/components/SkeletonLoader.vue'
 
 interface ConversationListItem {
@@ -25,6 +25,17 @@ const emit = defineEmits<{
   mute: [convId: string, mute: boolean]
   delete: [convId: string]
 }>()
+
+const searchQuery = ref('')
+
+const filteredItems = computed(() => {
+  const query = searchQuery.value.trim().toLowerCase()
+  if (!query) return props.items
+  return props.items.filter(item => 
+    item.title.toLowerCase().includes(query) || 
+    item.preview.toLowerCase().includes(query)
+  )
+})
 
 function handleSelect(convId: string): void {
   emit('select', convId)
@@ -107,39 +118,72 @@ function triggerDelete() {
       <span class="hint">{{ props.items.length }} 条</span>
     </header>
 
-    <SkeletonLoader v-if="props.loading" type="chat" :count="5" />
-    <ul v-else-if="props.items.length > 0" class="list">
-      <li v-for="item in props.items" :key="item.convId">
+    <!-- Glassmorphic Sidebar Search Box -->
+    <div class="search-box">
+      <div class="search-inner">
+        <Search :size="14" class="search-icon" />
+        <input
+          v-model="searchQuery"
+          type="text"
+          placeholder="搜索会话名称或预览内容..."
+          class="search-input"
+        />
         <button
-          class="item"
-          :class="{ 
-            'item--active': props.activeConvId === item.convId,
-            'item--pinned': item.pin
-          }"
+          v-if="searchQuery"
           type="button"
-          @click="handleSelect(item.convId)"
-          @contextmenu="openContextMenu($event, item)"
+          class="search-clear-btn"
+          title="清除搜索"
+          @click="searchQuery = ''"
         >
-          <div class="item-head">
-            <div class="title-wrap">
-              <Pin v-if="item.pin" :size="12" class="pin-icon" />
-              <strong>{{ item.title }}</strong>
-            </div>
-            <span>{{ item.timeText }}</span>
-          </div>
-          <div class="item-body">
-            <p>{{ item.preview || '暂无消息' }}</p>
-            <div class="status-wrap">
-              <BellOff v-if="item.mute" :size="12" class="mute-icon" />
-              <small v-if="item.unread > 0" :class="{ 'unread--muted': item.mute }">
-                {{ item.unread }}
-              </small>
-            </div>
-          </div>
+          <X :size="14" />
         </button>
-      </li>
-    </ul>
-    <p v-else class="empty">暂无会话</p>
+      </div>
+    </div>
+
+    <SkeletonLoader v-if="props.loading" type="chat" :count="5" />
+    <template v-else>
+      <ul v-if="filteredItems.length > 0" class="list">
+        <li v-for="item in filteredItems" :key="item.convId">
+          <button
+            class="item"
+            :class="{ 
+              'item--active': props.activeConvId === item.convId,
+              'item--pinned': item.pin
+            }"
+            type="button"
+            @click="handleSelect(item.convId)"
+            @contextmenu="openContextMenu($event, item)"
+          >
+            <div class="item-head">
+              <div class="title-wrap">
+                <Pin v-if="item.pin" :size="12" class="pin-icon" />
+                <strong>{{ item.title }}</strong>
+              </div>
+              <span>{{ item.timeText }}</span>
+            </div>
+            <div class="item-body">
+              <p>{{ item.preview || '暂无消息' }}</p>
+              <div class="status-wrap">
+                <BellOff v-if="item.mute" :size="12" class="mute-icon" />
+                <small v-if="item.unread > 0" :class="{ 'unread--muted': item.mute }">
+                  {{ item.unread }}
+                </small>
+              </div>
+            </div>
+          </button>
+        </li>
+      </ul>
+      <div v-else-if="searchQuery" class="search-empty">
+        <div class="empty-compass-box">
+          <Search :size="28" class="empty-compass-icon animate-pulse" />
+        </div>
+        <p>未找到匹配的会话</p>
+        <button type="button" class="btn-clear-search" @click="searchQuery = ''">
+          清空搜索词
+        </button>
+      </div>
+      <p v-else class="empty">暂无会话</p>
+    </template>
 
     <!-- Floating Glassmorphic Context Menu -->
     <teleport to="body">
@@ -441,5 +485,124 @@ function triggerDelete() {
 .fade-menu-leave-to {
   opacity: 0;
   transform: scale(0.98);
+}
+
+/* Sidebar Search Box Styles */
+.search-box {
+  padding: 8px 12px;
+  background: var(--c-bg-panel);
+  border-bottom: 1px solid var(--c-border);
+}
+
+.search-inner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius-md);
+  padding: 7px 10px;
+  position: relative;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.search-inner:focus-within {
+  background: #fff;
+  border-color: var(--c-primary);
+  box-shadow: 0 0 0 2px rgba(0, 198, 112, 0.1);
+}
+
+.search-icon {
+  color: var(--c-text-muted);
+  flex-shrink: 0;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.search-inner:focus-within .search-icon {
+  color: var(--c-primary);
+}
+
+.search-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 12px;
+  color: var(--c-text-main);
+  flex: 1;
+  padding: 0;
+}
+
+.search-input::placeholder {
+  color: var(--c-text-muted);
+  opacity: 0.8;
+}
+
+.search-clear-btn {
+  border: none;
+  background: transparent;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--c-text-muted);
+  border-radius: var(--radius-full);
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.search-clear-btn:hover {
+  background: var(--c-bg-hover);
+  color: var(--c-text-main);
+}
+
+/* Search Empty States */
+.search-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 16px;
+  text-align: center;
+}
+
+.empty-compass-box {
+  width: 50px;
+  height: 50px;
+  border-radius: var(--radius-full);
+  background: var(--c-primary-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  box-shadow: inset 0 2px 4px rgba(0, 198, 112, 0.05);
+}
+
+.empty-compass-icon {
+  color: var(--c-primary);
+}
+
+.search-empty p {
+  font-size: 13px;
+  color: var(--c-text-muted);
+  margin: 0 0 16px 0;
+}
+
+.btn-clear-search {
+  border: 1px solid var(--c-primary-soft);
+  background: var(--c-primary-soft);
+  color: var(--c-primary-active);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 16px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.btn-clear-search:hover {
+  background: var(--c-primary);
+  border-color: var(--c-primary);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(0, 198, 112, 0.2);
 }
 </style>

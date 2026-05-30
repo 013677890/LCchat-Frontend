@@ -240,6 +240,11 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="login-page">
+    <!-- Fluid background ambient glowing orbs -->
+    <div class="ambient-orb orb-1"></div>
+    <div class="ambient-orb orb-2"></div>
+    <div class="ambient-orb orb-3"></div>
+
     <section class="card">
       <header>
         <h1>LCchat</h1>
@@ -376,48 +381,102 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   position: relative;
-  /* 现代动态感极简背景 */
-  background: 
-    radial-gradient(circle at 10% 20%, rgba(0, 198, 112, 0.15) 0, rgba(0, 198, 112, 0) 40%),
-    radial-gradient(circle at 90% 80%, rgba(45, 100, 255, 0.12) 0, rgba(45, 100, 255, 0) 45%),
-    var(--c-bg-app);
+  background: #f1f5f9; /* Slate 100 base */
   padding: 20px;
   overflow: hidden;
 }
 
-/* 增加一层氛围装饰点阵或条纹（可选） */
+/* Dynamic Ambient Floating Mesh Orbs */
+.ambient-orb {
+  position: absolute;
+  border-radius: var(--radius-full);
+  filter: blur(100px);
+  opacity: 0.55;
+  mix-blend-mode: multiply;
+  z-index: 1;
+  pointer-events: none;
+  animation: floatOrb 22s infinite ease-in-out;
+}
+
+.orb-1 {
+  width: 450px;
+  height: 450px;
+  background: radial-gradient(circle, rgba(0, 198, 112, 0.4) 0%, rgba(0, 198, 112, 0) 70%);
+  top: -10%;
+  left: 15%;
+  animation-duration: 25s;
+}
+
+.orb-2 {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.35) 0%, rgba(37, 99, 235, 0) 70%);
+  bottom: -15%;
+  right: 10%;
+  animation-duration: 28s;
+  animation-delay: -5s;
+}
+
+.orb-3 {
+  width: 380px;
+  height: 380px;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.3) 0%, rgba(16, 185, 129, 0) 70%);
+  top: 40%;
+  right: 40%;
+  animation-duration: 20s;
+  animation-delay: -10s;
+}
+
+@keyframes floatOrb {
+  0% {
+    transform: translate(0px, 0px) scale(1) rotate(0deg);
+  }
+  33% {
+    transform: translate(40px, -60px) scale(1.1) rotate(120deg);
+  }
+  66% {
+    transform: translate(-30px, 40px) scale(0.9) rotate(240deg);
+  }
+  100% {
+    transform: translate(0px, 0px) scale(1) rotate(360deg);
+  }
+}
+
 .login-page::before {
   content: '';
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(0, 0, 0, 0.02) 1px, transparent 1px);
   background-size: 24px 24px;
   pointer-events: none;
-  z-index: 1;
+  z-index: 2;
 }
 
 .card {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   width: min(440px, 100%);
-  background: rgba(255, 255, 255, 0.85); /* 半透明背景 */
-  backdrop-filter: var(--blur-lg);
-  -webkit-backdrop-filter: var(--blur-lg);
+  background: rgba(255, 255, 255, 0.72); /* High transparency glass */
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
   border-radius: var(--radius-xl);
   padding: 40px 32px;
-  box-shadow: var(--shadow-float);
-  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 
+    0 24px 60px -15px rgba(0, 198, 112, 0.12), 
+    0 8px 24px -10px rgba(0, 0, 0, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   animation: floatUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes floatUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(24px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
@@ -428,62 +487,64 @@ onBeforeUnmount(() => {
 
 .card header h1 {
   margin: 0;
-  font-size: 32px;
+  font-size: 34px;
   font-weight: 800;
   background: linear-gradient(135deg, var(--c-primary), #009A57);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
-  letter-spacing: -0.5px;
+  letter-spacing: -1px;
 }
 
 .card header p {
   margin: 8px 0 0;
   color: var(--c-text-sub);
-  font-size: 15px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
 }
 
 .mode-switch {
   display: flex;
   background: rgba(0, 0, 0, 0.03);
-  padding: 4px;
+  padding: 3px;
   border-radius: var(--radius-md);
   margin-bottom: 24px;
-  position: relative;
+  border: 1px solid rgba(0, 0, 0, 0.02);
 }
 
 .mode-switch button {
   flex: 1;
-  height: 36px;
+  height: 34px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
   color: var(--c-text-sub);
-  font-size: 13px;
-  font-weight: 600;
-  position: relative;
-  z-index: 2;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
 }
 
 .mode-switch button.active {
   color: var(--c-text-main);
   background: #fff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08); /* 滑动式的高亮质感 */
+  box-shadow: var(--shadow-sm);
 }
 
 .mode-switch button:hover:not(.active) {
   color: var(--c-text-main);
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .form-grid {
   display: grid;
   gap: 16px;
-  animation: fadeIn 0.4s ease-out;
+  animation: formFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateX(-10px); }
-  to { opacity: 1; transform: translateX(0); }
+@keyframes formFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .field {
@@ -493,26 +554,28 @@ onBeforeUnmount(() => {
 }
 
 .field span {
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 700;
   color: var(--c-text-main);
   margin-left: 2px;
 }
 
 .field input {
   width: 100%;
-  border: 1.5px solid var(--c-border);
+  border: 1.5px solid rgba(0, 0, 0, 0.08);
   border-radius: var(--radius-md);
-  height: 46px;
+  height: 44px;
   padding: 0 16px;
-  font-size: 15px;
-  background: rgba(255, 255, 255, 0.6);
-  transition: all 0.25s ease;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  transition: all var(--duration-fast) var(--ease-out);
 }
 
 .field input:hover {
-  background: #fff;
-  border-color: rgba(0, 198, 112, 0.4);
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 198, 112, 0.3);
 }
 
 .field input:focus {
@@ -520,10 +583,12 @@ onBeforeUnmount(() => {
   border-color: var(--c-primary);
   box-shadow: 0 0 0 4px var(--c-primary-soft);
   outline: none;
+  transform: translateY(-1px);
 }
 
 .field input::placeholder {
   color: var(--c-text-muted);
+  opacity: 0.7;
 }
 
 .code-row {
@@ -534,38 +599,40 @@ onBeforeUnmount(() => {
 }
 
 .device {
-  margin: 16px 0 0;
+  margin: 20px 0 0;
   color: var(--c-text-muted);
-  font-size: 12px;
+  font-size: 11px;
   text-align: center;
-  font-family: monospace;
+  font-family: 'Fira Code', Consolas, monospace;
+  opacity: 0.8;
+  letter-spacing: -0.2px;
 }
 
 .message, .error {
   margin: 16px 0 0;
-  font-size: 14px;
-  padding: 12px 16px;
+  font-size: 13px;
+  padding: 10px 14px;
   border-radius: var(--radius-md);
   text-align: center;
-  font-weight: 500;
-  animation: slideDown 0.3s ease-out;
+  font-weight: 600;
+  animation: messageSlideDown 0.25s var(--ease-spring) forwards;
 }
 
-@keyframes slideDown {
-  from { opacity: 0; transform: translateY(-10px); }
+@keyframes messageSlideDown {
+  from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .message {
-  background: rgba(82, 196, 26, 0.1);
-  color: var(--c-success);
-  border: 1px solid rgba(82, 196, 26, 0.2);
+  background: rgba(82, 196, 26, 0.08);
+  color: #389e0d;
+  border: 1px solid rgba(82, 196, 26, 0.15);
 }
 
 .error {
-  background: rgba(255, 77, 79, 0.1);
-  color: var(--c-danger);
-  border: 1px solid rgba(255, 77, 79, 0.2);
+  background: rgba(255, 77, 79, 0.08);
+  color: #cf1322;
+  border: 1px solid rgba(255, 77, 79, 0.15);
 }
 
 .actions {
@@ -576,66 +643,72 @@ onBeforeUnmount(() => {
 
 button {
   width: 100%;
-  height: 48px;
+  height: 46px;
   border: none;
   border-radius: var(--radius-md);
   background: var(--c-primary);
   color: #fff;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0, 198, 112, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 198, 112, 0.25);
   transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.1);
 }
 
 button:hover:not(:disabled) {
   background: var(--c-primary-hover);
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0, 198, 112, 0.4);
+  box-shadow: 0 6px 16px rgba(0, 198, 112, 0.35);
 }
 
 button:active:not(:disabled) {
-  transform: translateY(1px);
-  box-shadow: 0 2px 8px rgba(0, 198, 112, 0.3);
+  transform: scale(0.97) translateY(0);
+  box-shadow: 0 2px 6px rgba(0, 198, 112, 0.25);
 }
 
 button:disabled {
   background: var(--c-text-muted);
   box-shadow: none;
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
 .ghost-btn {
   margin: 0;
   width: auto;
-  min-width: 130px;
-  height: 46px;
-  border: 1.5px solid var(--c-border);
+  min-width: 120px;
+  height: 44px;
+  border: 1.5px solid rgba(0, 0, 0, 0.08);
   border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.4);
   color: var(--c-text-main);
   padding: 0 16px;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   box-shadow: none;
 }
 
 .ghost-btn:hover:not(:disabled) {
   background: #fff;
-  border-color: var(--c-text-sub);
-  transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 198, 112, 0.4);
+  color: var(--c-primary-active);
+  box-shadow: var(--shadow-sm);
 }
 
 .secondary {
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(0, 0, 0, 0.03);
   color: var(--c-text-main);
   box-shadow: none;
+  border: 1px solid rgba(0, 0, 0, 0.03);
 }
 
 .secondary:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.02);
   box-shadow: none;
+}
+
+.secondary:active:not(:disabled) {
+  transform: scale(0.97);
 }
 </style>
