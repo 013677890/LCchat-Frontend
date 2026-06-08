@@ -6,10 +6,12 @@ import { useDeviceStore } from '../../../stores/device.store'
 import { useUserStore } from '../../../stores/user.store'
 import { useFriendStore } from '../../../stores/friend.store'
 import { useBlacklistStore } from '../../../stores/blacklist.store'
+import { useConnStore } from '../../../stores/conn.store'
 import { useRouter } from 'vue-router'
 import { useSettingsActions } from '../../chat/composables/useSettingsActions'
 import SettingsActionsPanel from '../components/SettingsActionsPanel.vue'
 import { toast } from 'vue-sonner'
+import { resetAuthenticatedState } from '../../../stores/authenticated-state'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -17,6 +19,7 @@ const deviceStore = useDeviceStore()
 const userStore = useUserStore()
 const friendStore = useFriendStore()
 const blacklistStore = useBlacklistStore()
+const connStore = useConnStore()
 
 const { userUuid, session } = storeToRefs(authStore)
 const { loading: deviceLoading } = storeToRefs(deviceStore)
@@ -54,6 +57,8 @@ const {
   blacklistStore,
   deviceStore,
   onSignedOut: async () => {
+    connStore.disconnect()
+    await resetAuthenticatedState()
     await router.replace('/login')
   }
 })

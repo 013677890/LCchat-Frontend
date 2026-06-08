@@ -15,6 +15,7 @@ import { useSessionStore } from '../../stores/session.store'
 import { useConnStore } from '../../stores/conn.store'
 import { toast } from 'vue-sonner'
 import { resolveAssetUrl } from '../../shared/utils/asset-url'
+import { resetAuthenticatedState } from '../../stores/authenticated-state'
 
 const router = useRouter()
 const route = useRoute()
@@ -77,6 +78,7 @@ function handleNavChange(nextNav: MainNavKey) {
 async function handleLogout() {
   connStore.disconnect()
   await authStore.signOut()
+  await resetAuthenticatedState()
   await router.replace('/login')
 }
 
