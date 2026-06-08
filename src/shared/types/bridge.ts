@@ -6,7 +6,8 @@ import type {
   FriendRow,
   MessageRow,
   ProfileRow,
-  SessionData
+  SessionData,
+  SyncStateRow
 } from './localdb'
 
 export interface BridgeApi {
@@ -26,12 +27,20 @@ export interface BridgeApi {
     }
     friends: {
       getList: (userUuid: string) => Promise<FriendRow[]>
-      replaceAll: (userUuid: string, items: FriendRow[], version: number) => Promise<void>
+      replaceAll: (
+        userUuid: string,
+        items: FriendRow[],
+        version: number,
+        cursor: string
+      ) => Promise<void>
       applyChanges: (
         userUuid: string,
         changes: FriendChangeRow[],
-        latestVersion: number
+        latestVersion: number,
+        cursor: string
       ) => Promise<void>
+      getSyncState: (userUuid: string) => Promise<SyncStateRow | null>
+      saveSyncState: (userUuid: string, latestVersion: number, cursor: string) => Promise<void>
     }
     applies: {
       getInbox: (userUuid: string) => Promise<FriendApplyRow[]>

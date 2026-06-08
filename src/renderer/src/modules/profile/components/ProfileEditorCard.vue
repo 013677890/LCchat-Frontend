@@ -4,8 +4,6 @@ import type { UpdateMyProfileRequest } from '../../../shared/types/user'
 
 export interface ProfileEditorViewData {
   uuid: string
-  email: string
-  telephone: string
   avatar: string
   nickname: string
   gender: number
@@ -72,14 +70,7 @@ const avatarFallback = computed(() => {
   return name ? name.slice(0, 1).toUpperCase() : '?'
 })
 const profileDisplayName = computed(() => props.profile?.nickname?.trim() || props.profile?.uuid || '-')
-const profileContactLine = computed(() => {
-  const email = props.profile?.email?.trim() || ''
-  const telephone = props.profile?.telephone?.trim() || ''
-  if (email && telephone) {
-    return `${email} · ${telephone}`
-  }
-  return email || telephone || '未绑定联系方式'
-})
+const profileSubtitle = computed(() => props.profile?.signature?.trim() || '未设置签名')
 
 function triggerAvatarUpload(): void {
   if (!props.profile || props.avatarUploading) {
@@ -107,12 +98,28 @@ function handleSubmit(): void {
     return
   }
 
-  emit('submit', {
-    nickname: nickname.value.trim(),
-    gender: gender.value,
-    birthday: birthday.value,
-    signature: signature.value.trim()
-  })
+  const initialGender =
+    props.profile.gender === 1 || props.profile.gender === 2 || props.profile.gender === 3
+      ? props.profile.gender
+      : 3
+  const payload: UpdateMyProfileRequest = {}
+  const nextNickname = nickname.value.trim()
+  const nextSignature = signature.value.trim()
+
+  if (nextNickname !== props.profile.nickname) {
+    payload.nickname = nextNickname
+  }
+  if (nextSignature !== props.profile.signature) {
+    payload.signature = nextSignature
+  }
+  if (birthday.value !== props.profile.birthday) {
+    payload.birthday = birthday.value
+  }
+  if (gender.value !== initialGender) {
+    payload.gender = gender.value
+  }
+
+  emit('submit', payload)
 }
 </script>
 
@@ -130,7 +137,7 @@ function handleSubmit(): void {
       </div>
       <div class="profile-main">
         <h4>{{ profileDisplayName }}</h4>
-        <p>{{ profileContactLine }}</p>
+        <p>{{ profileSubtitle }}</p>
       </div>
       <input
         ref="avatarInputRef"
@@ -153,14 +160,6 @@ function handleSubmit(): void {
       <div>
         <dt>用户 UUID</dt>
         <dd>{{ props.profile?.uuid || '-' }}</dd>
-      </div>
-      <div>
-        <dt>邮箱</dt>
-        <dd>{{ props.profile?.email || '-' }}</dd>
-      </div>
-      <div>
-        <dt>手机号</dt>
-        <dd>{{ props.profile?.telephone || '-' }}</dd>
       </div>
     </dl>
 

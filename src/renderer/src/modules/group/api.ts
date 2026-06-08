@@ -211,6 +211,10 @@ export interface GetGroupMemberIdsResponse {
   userUuids: string[]
 }
 
+function pathSegment(value: string | number): string {
+  return encodeURIComponent(String(value))
+}
+
 // 1. 创建群
 export async function createGroup(payload: CreateGroupRequest): Promise<ApiResponse<CreateGroupResponse>> {
   const response = await httpClient.post<ApiResponse<CreateGroupResponse>>('/api/v1/auth/groups', payload)
@@ -225,37 +229,37 @@ export async function fetchGroupList(): Promise<ApiResponse<{ groups: GroupInfoD
 
 // 3. 获取群资料
 export async function fetchGroupInfo(groupUuid: string): Promise<ApiResponse<GroupInfoDTO>> {
-  const response = await httpClient.get<ApiResponse<GroupInfoDTO>>(`/api/v1/auth/groups/${groupUuid}`)
+  const response = await httpClient.get<ApiResponse<GroupInfoDTO>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}`)
   return response.data
 }
 
 // 4. 更新群资料
 export async function updateGroupInfo(groupUuid: string, payload: UpdateGroupRequest): Promise<ApiResponse<null>> {
-  const response = await httpClient.patch<ApiResponse<null>>(`/api/v1/auth/groups/${groupUuid}`, payload)
+  const response = await httpClient.patch<ApiResponse<null>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}`, payload)
   return response.data
 }
 
 // 5. 更新群公告
 export async function updateGroupNotice(groupUuid: string, payload: UpdateGroupNoticeRequest): Promise<ApiResponse<null>> {
-  const response = await httpClient.put<ApiResponse<null>>(`/api/v1/auth/groups/${groupUuid}/notice`, payload)
+  const response = await httpClient.put<ApiResponse<null>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/notice`, payload)
   return response.data
 }
 
 // 6. 申请加入群
 export async function applyJoinGroup(groupUuid: string, payload: ApplyJoinGroupRequest = {}): Promise<ApiResponse<ApplyJoinGroupResponse>> {
-  const response = await httpClient.post<ApiResponse<ApplyJoinGroupResponse>>(`/api/v1/auth/groups/${groupUuid}/apply`, payload)
+  const response = await httpClient.post<ApiResponse<ApplyJoinGroupResponse>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/apply`, payload)
   return response.data
 }
 
 // 7. 撤销我的入群申请
 export async function cancelJoinGroupApplication(groupUuid: string): Promise<ApiResponse<null>> {
-  const response = await httpClient.delete<ApiResponse<null>>(`/api/v1/auth/groups/${groupUuid}/apply`)
+  const response = await httpClient.delete<ApiResponse<null>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/apply`)
   return response.data
 }
 
 // 8. 查询我在指定群的最新申请
 export async function fetchMyJoinGroupApplication(groupUuid: string): Promise<ApiResponse<GetMyJoinApplicationResponse>> {
-  const response = await httpClient.get<ApiResponse<GetMyJoinApplicationResponse>>(`/api/v1/auth/groups/${groupUuid}/my-join-application`)
+  const response = await httpClient.get<ApiResponse<GetMyJoinApplicationResponse>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/my-join-application`)
   return response.data
 }
 
@@ -267,55 +271,55 @@ export async function fetchMyJoinGroupApplications(params: ListMyJoinApplication
 
 // 10. 获取待审批入群申请
 export async function fetchJoinRequests(groupUuid: string, params: ListJoinRequestsParams = {}): Promise<ApiResponse<ListJoinRequestsResponse>> {
-  const response = await httpClient.get<ApiResponse<ListJoinRequestsResponse>>(`/api/v1/auth/groups/${groupUuid}/join-requests`, { params })
+  const response = await httpClient.get<ApiResponse<ListJoinRequestsResponse>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/join-requests`, { params })
   return response.data
 }
 
 // 11. 获取待审批数量
 export async function fetchJoinRequestPendingCount(groupUuid: string): Promise<ApiResponse<GetPendingCountResponse>> {
-  const response = await httpClient.get<ApiResponse<GetPendingCountResponse>>(`/api/v1/auth/groups/${groupUuid}/join-requests/pending-count`)
+  const response = await httpClient.get<ApiResponse<GetPendingCountResponse>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/join-requests/pending-count`)
   return response.data
 }
 
 // 12. 获取已审批入群申请
 export async function fetchReviewedJoinRequests(groupUuid: string, params: ListReviewedJoinRequestsParams = {}): Promise<ApiResponse<ListReviewedJoinRequestsResponse>> {
-  const response = await httpClient.get<ApiResponse<ListReviewedJoinRequestsResponse>>(`/api/v1/auth/groups/${groupUuid}/join-requests/reviewed`, { params })
+  const response = await httpClient.get<ApiResponse<ListReviewedJoinRequestsResponse>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/join-requests/reviewed`, { params })
   return response.data
 }
 
 // 13. 审批入群申请
 export async function reviewJoinGroup(groupUuid: string, applyId: string | number, payload: ReviewJoinGroupRequest): Promise<ApiResponse<null>> {
-  const response = await httpClient.post<ApiResponse<null>>(`/api/v1/auth/groups/${groupUuid}/join-requests/${applyId}/review`, payload)
+  const response = await httpClient.post<ApiResponse<null>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/join-requests/${pathSegment(applyId)}/review`, payload)
   return response.data
 }
 
 // 14. 转让群主
 export async function transferGroupOwner(groupUuid: string, payload: TransferGroupOwnerRequest): Promise<ApiResponse<null>> {
-  const response = await httpClient.post<ApiResponse<null>>(`/api/v1/auth/groups/${groupUuid}/transfer-owner`, payload)
+  const response = await httpClient.post<ApiResponse<null>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/transfer-owner`, payload)
   return response.data
 }
 
 // 15. 解散群
 export async function dismissGroup(groupUuid: string): Promise<ApiResponse<null>> {
-  const response = await httpClient.delete<ApiResponse<null>>(`/api/v1/auth/groups/${groupUuid}`)
+  const response = await httpClient.delete<ApiResponse<null>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}`)
   return response.data
 }
 
 // 16. 主动退群
 export async function leaveGroup(groupUuid: string): Promise<ApiResponse<null>> {
-  const response = await httpClient.post<ApiResponse<null>>(`/api/v1/auth/groups/${groupUuid}/leave`)
+  const response = await httpClient.post<ApiResponse<null>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/leave`)
   return response.data
 }
 
 // 17. 添加群成员
 export async function addGroupMembers(groupUuid: string, payload: AddGroupMembersRequest): Promise<ApiResponse<null>> {
-  const response = await httpClient.post<ApiResponse<null>>(`/api/v1/auth/groups/${groupUuid}/members`, payload)
+  const response = await httpClient.post<ApiResponse<null>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/members`, payload)
   return response.data
 }
 
 // 18. 获取群成员列表
 export async function fetchGroupMembers(groupUuid: string): Promise<ApiResponse<GetMemberListResponse>> {
-  const response = await httpClient.get<ApiResponse<GetMemberListResponse>>(`/api/v1/auth/groups/${groupUuid}/members`)
+  const response = await httpClient.get<ApiResponse<GetMemberListResponse>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/members`)
   return response.data
 }
 
@@ -327,48 +331,48 @@ export async function searchGroups(params: SearchGroupsParams): Promise<ApiRespo
 
 // 20. 搜索群成员
 export async function searchGroupMembers(groupUuid: string, params: SearchGroupMembersParams): Promise<ApiResponse<SearchGroupMembersResponse>> {
-  const response = await httpClient.get<ApiResponse<SearchGroupMembersResponse>>(`/api/v1/auth/groups/${groupUuid}/members/search`, { params })
+  const response = await httpClient.get<ApiResponse<SearchGroupMembersResponse>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/members/search`, { params })
   return response.data
 }
 
 // 21. 移除群成员
 export async function removeGroupMember(groupUuid: string, userUuid: string): Promise<ApiResponse<null>> {
-  const response = await httpClient.delete<ApiResponse<null>>(`/api/v1/auth/groups/${groupUuid}/members/${userUuid}`)
+  const response = await httpClient.delete<ApiResponse<null>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/members/${pathSegment(userUuid)}`)
   return response.data
 }
 
 // 22. 更新我的群名片
 export async function updateMyGroupNickname(groupUuid: string, payload: { groupNickname: string }): Promise<ApiResponse<null>> {
-  const response = await httpClient.patch<ApiResponse<null>>(`/api/v1/auth/groups/${groupUuid}/my-nickname`, payload)
+  const response = await httpClient.patch<ApiResponse<null>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/my-nickname`, payload)
   return response.data
 }
 
 // 23. 管理员修改成员群名片
 export async function updateGroupMemberNickname(groupUuid: string, userUuid: string, payload: UpdateGroupMemberNicknameRequest): Promise<ApiResponse<null>> {
-  const response = await httpClient.patch<ApiResponse<null>>(`/api/v1/auth/groups/${groupUuid}/members/${userUuid}/nickname`, payload)
+  const response = await httpClient.patch<ApiResponse<null>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/members/${pathSegment(userUuid)}/nickname`, payload)
   return response.data
 }
 
 // 24. 设置成员角色
 export async function updateMemberRole(groupUuid: string, userUuid: string, payload: UpdateMemberRoleRequest): Promise<ApiResponse<null>> {
-  const response = await httpClient.patch<ApiResponse<null>>(`/api/v1/auth/groups/${groupUuid}/members/${userUuid}/role`, payload)
+  const response = await httpClient.patch<ApiResponse<null>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/members/${pathSegment(userUuid)}/role`, payload)
   return response.data
 }
 
 // 25. 设置成员禁言
 export async function muteGroupMember(groupUuid: string, userUuid: string, payload: MuteGroupMemberRequest): Promise<ApiResponse<null>> {
-  const response = await httpClient.patch<ApiResponse<null>>(`/api/v1/auth/groups/${groupUuid}/members/${userUuid}/mute`, payload)
+  const response = await httpClient.patch<ApiResponse<null>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/members/${pathSegment(userUuid)}/mute`, payload)
   return response.data
 }
 
 // 26. 更新全员禁言
 export async function updateGroupMuteSetting(groupUuid: string, payload: UpdateGroupMuteSettingRequest): Promise<ApiResponse<null>> {
-  const response = await httpClient.patch<ApiResponse<null>>(`/api/v1/auth/groups/${groupUuid}/mute-setting`, payload)
+  const response = await httpClient.patch<ApiResponse<null>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/mute-setting`, payload)
   return response.data
 }
 
 // 27. 获取群成员 UUID 列表
 export async function fetchGroupMemberIDs(groupUuid: string): Promise<ApiResponse<GetGroupMemberIdsResponse>> {
-  const response = await httpClient.get<ApiResponse<GetGroupMemberIdsResponse>>(`/api/v1/auth/groups/${groupUuid}/member-ids`)
+  const response = await httpClient.get<ApiResponse<GetGroupMemberIdsResponse>>(`/api/v1/auth/groups/${pathSegment(groupUuid)}/member-ids`)
   return response.data
 }

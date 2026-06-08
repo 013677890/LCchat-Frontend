@@ -9,11 +9,20 @@ import type {
   FriendRow,
   JsonObject,
   MessageRow,
-  ProfileRow
+  ProfileRow,
+  SyncStateRow
 } from '../../shared/types/localdb'
 
 type PayloadRow = {
   payload_json: string
+  updated_at: number
+}
+
+type SyncStateDbRow = {
+  user_uuid: string
+  domain: string
+  last_version: number
+  cursor: string | null
   updated_at: number
 }
 
@@ -63,20 +72,50 @@ function normalizeCursor(cursor?: number): number | null {
   return nextCursor > 0 ? nextCursor : null
 }
 
-function upsertSyncState(userUuid: string, domain: string, lastVersion: number): void {
+function upsertSyncState(
+  userUuid: string,
+  domain: string,
+  lastVersion: number,
+  cursor = ''
+): void {
   const db = getLocalDB()
   db.prepare(
-    `INSERT INTO sync_state(user_uuid, domain, last_version, updated_at)
-     VALUES(@user_uuid, @domain, @last_version, @updated_at)
+    `INSERT INTO sync_state(user_uuid, domain, last_version, cursor, updated_at)
+     VALUES(@user_uuid, @domain, @last_version, @cursor, @updated_at)
      ON CONFLICT(user_uuid, domain) DO UPDATE SET
        last_version = excluded.last_version,
+       cursor = excluded.cursor,
        updated_at = excluded.updated_at`
   ).run({
     user_uuid: userUuid,
     domain,
     last_version: lastVersion,
+    cursor,
     updated_at: now()
   })
+}
+
+function getSyncState(userUuid: string, domain: string): SyncStateRow | null {
+  const db = getLocalDB()
+  const row = db
+    .prepare(
+      `SELECT user_uuid, domain, last_version, cursor, updated_at
+       FROM sync_state
+       WHERE user_uuid = ? AND domain = ?`
+    )
+    .get(userUuid, domain) as SyncStateDbRow | undefined
+
+  if (!row) {
+    return null
+  }
+
+  return {
+    userUuid: row.user_uuid,
+    domain: row.domain,
+    lastVersion: row.last_version,
+    cursor: row.cursor ?? '',
+    updatedAt: row.updated_at
+  }
 }
 
 function upsertApplyRows(
@@ -206,7 +245,7 @@ export function registerLocalDBHandlers(ipcMain: IpcMain): void {
   bind(
     ipcMain,
     IPC_CHANNELS.localdb.friends.replaceAll,
-    (userUuid: string, items: FriendRow[], version: number) => {
+    (userUuid: string, items: FriendRow[], version: number, cursor: string) => {
       const db = getLocalDB()
       const replaceAll = db.transaction((rows: FriendRow[]) => {
         db.prepare(`DELETE FROM friends WHERE user_uuid = ?`).run(userUuid)
@@ -227,14 +266,14 @@ export function registerLocalDBHandlers(ipcMain: IpcMain): void {
       })
 
       replaceAll(items)
-      upsertSyncState(userUuid, 'friend', version)
+      upsertSyncState(userUuid, 'friend', version, cursor)
     }
   )
 
   bind(
     ipcMain,
     IPC_CHANNELS.localdb.friends.applyChanges,
-    (userUuid: string, changes: FriendChangeRow[], latestVersion: number) => {
+    (userUuid: string, changes: FriendChangeRow[], latestVersion: number, cursor: string) => {
       const db = getLocalDB()
       const applyChanges = db.transaction((inputChanges: FriendChangeRow[]) => {
         const deleteStmt = db.prepare(`DELETE FROM friends WHERE user_uuid = ? AND peer_uuid = ?`)
@@ -264,7 +303,19 @@ export function registerLocalDBHandlers(ipcMain: IpcMain): void {
       })
 
       applyChanges(changes)
-      upsertSyncState(userUuid, 'friend', latestVersion)
+      upsertSyncState(userUuid, 'friend', latestVersion, cursor)
+    }
+  )
+
+  bind(ipcMain, IPC_CHANNELS.localdb.friends.getSyncState, (userUuid: string) => {
+    return getSyncState(userUuid, 'friend')
+  })
+
+  bind(
+    ipcMain,
+    IPC_CHANNELS.localdb.friends.saveSyncState,
+    (userUuid: string, latestVersion: number, cursor: string) => {
+      upsertSyncState(userUuid, 'friend', latestVersion, cursor)
     }
   )
 
@@ -522,6 +573,13 @@ export function registerLocalDBHandlers(ipcMain: IpcMain): void {
     (userUuid: string, convId: string, items: MessageRow[]) => {
       const db = getLocalDB()
       const upsertMessages = db.transaction((rows: MessageRow[]) => {
+        const deleteClientDuplicateStmt = db.prepare(
+          `DELETE FROM messages
+           WHERE user_uuid = ?
+             AND conv_id = ?
+             AND client_msg_id = ?
+             AND msg_id <> ?`
+        )
         const stmt = db.prepare(
           `INSERT INTO messages(
              user_uuid,
@@ -551,6 +609,10 @@ export function registerLocalDBHandlers(ipcMain: IpcMain): void {
         )
 
         for (const item of rows) {
+          if (item.clientMsgId) {
+            deleteClientDuplicateStmt.run(userUuid, convId, item.clientMsgId, item.msgId)
+          }
+
           stmt.run({
             user_uuid: userUuid,
             conv_id: convId,

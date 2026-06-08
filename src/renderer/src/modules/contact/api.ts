@@ -18,6 +18,7 @@ export interface SyncFriendListResponseData {
   changes: SyncFriendChangeDTO[]
   hasMore: boolean
   latestVersion: number
+  nextCursor: string
 }
 
 export interface GetFriendListParams {
@@ -29,6 +30,7 @@ export interface GetFriendListParams {
 export interface SyncFriendListRequest {
   version: number
   limit?: number
+  cursor?: string
 }
 
 export interface FriendApplyItemDTO {

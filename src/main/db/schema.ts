@@ -62,6 +62,7 @@ export const TABLE_SCHEMAS: string[] = [
     user_uuid TEXT NOT NULL,
     domain TEXT NOT NULL,
     last_version INTEGER NOT NULL,
+    cursor TEXT NOT NULL DEFAULT '',
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (user_uuid, domain)
   )`

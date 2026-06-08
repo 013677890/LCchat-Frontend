@@ -32,13 +32,7 @@ export interface RegisterResponseData {
 export interface LoginUserInfo {
   uuid: string
   nickname: string
-  telephone: string
-  email: string
   avatar: string
-  gender: number
-  signature: string
-  birthday: string
-  status: number
 }
 
 export interface LoginResponseData {

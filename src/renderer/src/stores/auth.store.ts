@@ -17,16 +17,6 @@ import {
 import { buildLoginDeviceInfo } from '../modules/auth/device-info'
 import { logout } from '../modules/security/api'
 
-function createDemoSession(userUuid: string, deviceId: string): SessionData {
-  return {
-    userUuid,
-    accessToken: `demo_access_${userUuid}`,
-    refreshToken: `demo_refresh_${userUuid}`,
-    expiresAt: Date.now() + 60 * 60 * 1000,
-    deviceId
-  }
-}
-
 function buildSessionFromLoginResponse(payload: LoginResponseData, deviceId: string): SessionData {
   const userUuid = payload.userInfo?.uuid
   if (!userUuid) {
@@ -84,12 +74,6 @@ export const useAuthStore = defineStore('auth', () => {
     } catch (error) {
       console.warn('localdb init failed, continue with in-memory mode', error)
     }
-  }
-
-  async function signInWithDemoAccount(userInput: string): Promise<void> {
-    const deviceId = await window.api.device.getId()
-    const normalizedUser = userInput.trim() || 'demo-user'
-    await signIn(createDemoSession(normalizedUser, deviceId))
   }
 
   async function signInWithPassword(account: string, password: string): Promise<void> {
@@ -232,7 +216,6 @@ export const useAuthStore = defineStore('auth', () => {
     userUuid,
     hydrateSession,
     signIn,
-    signInWithDemoAccount,
     signInWithPassword,
     signInWithCode,
     registerWithEmail,

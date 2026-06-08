@@ -8,13 +8,15 @@ import { useSessionStore } from '../../../stores/session.store'
 import { useGroupStore } from '../../../stores/group.store'
 import { useFriendStore } from '../../../stores/friend.store'
 import { useAuthStore } from '../../../stores/auth.store'
-import { addBlacklist, removeBlacklist, checkBlacklist } from '../../blacklist/api'
+import { useBlacklistStore } from '../../../stores/blacklist.store'
+import { checkBlacklist } from '../../blacklist/api'
 import type { GroupMemberItemDTO } from '../../group/api'
 
 const sessionStore = useSessionStore()
 const groupStore = useGroupStore()
 const friendStore = useFriendStore()
 const authStore = useAuthStore()
+const blacklistStore = useBlacklistStore()
 
 const {
   conversations,
@@ -263,10 +265,13 @@ async function toggleBlacklist() {
   if (!currentFriend.value) return
   try {
     if (isBlacklisted.value) {
-      await removeBlacklist(currentFriend.value.peerUuid)
+      await blacklistStore.removeFromBlacklist(authStore.userUuid, currentFriend.value.peerUuid)
       isBlacklisted.value = false
     } else {
-      await addBlacklist({ targetUuid: currentFriend.value.peerUuid })
+      await blacklistStore.addToBlacklist(authStore.userUuid, currentFriend.value.peerUuid, {
+        nickname: String(currentFriend.value.payload.nickname || currentFriend.value.peerUuid),
+        avatar: String(currentFriend.value.payload.avatar || '')
+      })
       isBlacklisted.value = true
     }
   } catch (e) {

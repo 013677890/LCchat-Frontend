@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useAuthStore } from '../../../stores/auth.store'
 import { useDeviceStore } from '../../../stores/device.store'
@@ -19,7 +19,6 @@ const friendStore = useFriendStore()
 const blacklistStore = useBlacklistStore()
 
 const { userUuid, session } = storeToRefs(authStore)
-const { profile } = storeToRefs(userStore)
 const { loading: deviceLoading } = storeToRefs(deviceStore)
 
 // SettingsView does not currently handle blacklist selection explicitly within the UI,
@@ -81,7 +80,7 @@ watch(deviceActionError, (newVal) => {
   }
 })
 
-const currentEmail = computed(() => (profile.value?.payload?.email as string) || '')
+const currentEmail = ''
 
 onBeforeUnmount(() => {
   dispose()

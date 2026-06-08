@@ -31,21 +31,26 @@ export const useConnStore = defineStore('conn', () => {
 
   function getWsUrl(): string {
     const gatewayUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'
+    const explicitWsUrl = import.meta.env.VITE_WS_BASE_URL
     const token = authStore.session?.accessToken ?? ''
     const deviceId = authStore.session?.deviceId ?? ''
-    
-    let host = 'localhost'
-    let protocol = 'ws:'
+
+    let baseUrl = 'ws://localhost:8081'
     
     try {
-      const parsed = new URL(gatewayUrl)
-      host = parsed.hostname
-      protocol = parsed.protocol === 'https:' ? 'wss:' : 'ws:'
+      const parsed = new URL(explicitWsUrl || gatewayUrl)
+      const protocol =
+        parsed.protocol === 'wss:' || parsed.protocol === 'https:' ? 'wss:' : 'ws:'
+      const port =
+        explicitWsUrl || parsed.port !== '8080' ? parsed.port : '8081'
+      const host = port ? `${parsed.hostname}:${port}` : parsed.hostname
+      const path = explicitWsUrl ? parsed.pathname.replace(/\/$/, '') : ''
+      baseUrl = `${protocol}//${host}${path}`
     } catch (e) {
-      console.warn('Failed to parse VITE_API_BASE_URL, using defaults', e)
+      console.warn('Failed to parse WebSocket base URL, using defaults', e)
     }
     
-    return `${protocol}//${host}:8081/ws?token=${encodeURIComponent(token)}&device_id=${encodeURIComponent(deviceId)}`
+    return `${baseUrl}/ws?token=${encodeURIComponent(token)}&device_id=${encodeURIComponent(deviceId)}`
   }
 
   function connect() {
@@ -209,10 +214,10 @@ export const useConnStore = defineStore('conn', () => {
       case 'MSG_PUSH': {
         const msgItem = decodeMsgItem(envelope.data)
         console.log('[WS] Received MSG_PUSH:', msgItem)
-        await sessionStore.handleIncomingMessage(userUuid, msgItem)
+        const ackSeq = await sessionStore.handleIncomingMessage(userUuid, msgItem)
         
-        if (envelope.ackRequired) {
-          sendAck(msgItem.convId, msgItem.seq, msgItem.msgId)
+        if (envelope.ackRequired && ackSeq > 0) {
+          sendAck(msgItem.convId, ackSeq, msgItem.msgId)
         }
         break
       }

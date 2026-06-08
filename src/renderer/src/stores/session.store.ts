@@ -7,6 +7,95 @@ import { useFriendStore } from './friend.store'
 import { useGroupStore } from './group.store'
 import { useAppStore } from './app.store'
 
+const MAX_CONVERSATION_SYNC_ROUNDS = 20
+const MAX_MESSAGE_PULL_ROUNDS = 20
+
+interface PullMessagesData {
+  messages?: any[]
+  hasMore?: boolean
+  maxSeq?: number
+}
+
+interface ConversationsData {
+  conversations?: any[]
+  hasMore?: boolean
+  nextCursor?: string
+}
+
+async function pullMessageRows(
+  userUuid: string,
+  convId: string,
+  options: {
+    anchorSeq: number
+    direction: 1 | 2
+    followHasMore: boolean
+  }
+): Promise<MessageRow[]> {
+  const pulledRows: MessageRow[] = []
+  let anchorSeq = options.anchorSeq
+  let hasMore = true
+  let rounds = 0
+
+  while (hasMore && rounds < MAX_MESSAGE_PULL_ROUNDS) {
+    rounds += 1
+
+    const response = await httpClient.get('/api/v1/auth/messages/pull', {
+      params: {
+        convId,
+        anchorSeq,
+        limit: 100,
+        direction: options.direction
+      }
+    })
+    const data = (response.data.data ?? {}) as PullMessagesData
+    const mapped = (data.messages ?? []).map((item: any) => mapMsgItemToRow(userUuid, item))
+    pulledRows.push(...mapped)
+
+    if (mapped.length === 0 || !options.followHasMore) {
+      break
+    }
+
+    const nextAnchorSeq = Math.max(...mapped.map((item) => item.seq ?? anchorSeq))
+    if (nextAnchorSeq <= anchorSeq) {
+      break
+    }
+
+    anchorSeq = nextAnchorSeq
+    hasMore = Boolean(data.hasMore)
+  }
+
+  return pulledRows
+}
+
+function getMaxMessageSeq(rows: MessageRow[]): number {
+  return rows.reduce((maxSeq, item) => Math.max(maxSeq, item.seq ?? 0), 0)
+}
+
+function resolveAckSeq(previousMaxSeq: number, rows: MessageRow[], receivedSeq?: number): number {
+  const targetSeq = Number(receivedSeq ?? 0)
+  if (!Number.isFinite(targetSeq) || targetSeq <= 0) {
+    return 0
+  }
+
+  const seqSet = new Set(
+    rows.map((item) => item.seq ?? 0).filter((seq) => Number.isFinite(seq) && seq > 0)
+  )
+  let ackSeq = Math.max(0, Math.min(previousMaxSeq, targetSeq))
+
+  if (ackSeq === 0 && seqSet.has(1)) {
+    ackSeq = 1
+  }
+
+  for (let seq = ackSeq + 1; seq <= targetSeq; seq += 1) {
+    if (!seqSet.has(seq)) {
+      break
+    }
+    ackSeq = seq
+  }
+
+  return ackSeq
+}
+
 function getString(payload: JsonObject, key: string, fallback = ''): string {
   const value = payload[key]
   return typeof value === 'string' ? value : fallback
@@ -91,6 +180,27 @@ function sortConversations(list: ConversationRow[]): ConversationRow[] {
   })
 }
 
+function upsertMessages(currentRows: MessageRow[], nextRows: MessageRow[]): MessageRow[] {
+  const merged = [...currentRows]
+
+  for (const nextRow of nextRows) {
+    const existingIndex = merged.findIndex((row) => {
+      if (row.msgId === nextRow.msgId) {
+        return true
+      }
+      return Boolean(row.clientMsgId && row.clientMsgId === nextRow.clientMsgId)
+    })
+
+    if (existingIndex >= 0) {
+      merged[existingIndex] = nextRow
+    } else {
+      merged.push(nextRow)
+    }
+  }
+
+  return merged.sort((a, b) => a.sendTime - b.sendTime)
+}
+
 export const useSessionStore = defineStore('session', () => {
   const currentUserUuid = ref('')
   const conversations = shallowRef<ConversationRow[]>([])
@@ -161,8 +271,33 @@ export const useSessionStore = defineStore('session', () => {
 
   async function syncConversationsFromServer(userUuid: string): Promise<void> {
     try {
-      const response = await httpClient.get('/api/v1/auth/conversations')
-      const items = response.data.data.conversations || []
+      const items: any[] = []
+      let cursor = ''
+      let hasMore = true
+      let rounds = 0
+      const seenCursors = new Set<string>()
+
+      while (hasMore && rounds < MAX_CONVERSATION_SYNC_ROUNDS) {
+        rounds += 1
+
+        const response = await httpClient.get('/api/v1/auth/conversations', {
+          params: {
+            pageSize: 100,
+            ...(cursor ? { cursor } : {})
+          }
+        })
+        const data = (response.data.data ?? {}) as ConversationsData
+        items.push(...(data.conversations ?? []))
+
+        const nextCursor = data.nextCursor ?? ''
+        hasMore = Boolean(data.hasMore)
+        if (!hasMore || !nextCursor || seenCursors.has(nextCursor)) {
+          break
+        }
+
+        seenCursors.add(nextCursor)
+        cursor = nextCursor
+      }
       
       const mapped = items.map((item: any) => mapConversationItemToRow(userUuid, item))
       await safeWrite(() => window.api.localdb.chat.upsertConversations(userUuid, mapped))
@@ -187,20 +322,18 @@ export const useSessionStore = defineStore('session', () => {
 
     // Pull from backend
     try {
-      const response = await httpClient.get('/api/v1/auth/messages/pull', {
-        params: {
-          convId,
-          limit: 50,
-          direction: 0
-        }
+      const hasCachedMessages = messages.length > 0
+      const pullDirection = hasCachedMessages ? 1 : 2
+      const anchorSeq = hasCachedMessages ? getMaxMessageSeq(messages) : 0
+      const pulledRows = await pullMessageRows(userUuid, convId, {
+        anchorSeq,
+        direction: pullDirection,
+        followHasMore: pullDirection === 1
       })
       
-      const serverMessages = response.data.data.messages || []
-      const mapped = serverMessages.map((item: any) => mapMsgItemToRow(userUuid, item))
-      
-      if (mapped.length > 0) {
-        await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, mapped))
-        messages = mapped
+      if (pulledRows.length > 0) {
+        await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, pulledRows))
+        messages = upsertMessages(messages, pulledRows)
       }
     } catch (error) {
       console.warn('Failed to pull messages from server, using cache', error)
@@ -234,10 +367,11 @@ export const useSessionStore = defineStore('session', () => {
   async function markRead(convId: string, readSeq: number) {
     if (!currentUserUuid.value) return
     try {
-      await httpClient.post('/api/v1/auth/conversations/mark-read', {
+      const response = await httpClient.post('/api/v1/auth/conversations/mark-read', {
         convId,
         readSeq
       })
+      const unreadCount = Number(response.data.data?.unreadCount ?? 0)
       
       conversations.value = conversations.value.map(c => {
         if (c.convId === convId) {
@@ -245,7 +379,7 @@ export const useSessionStore = defineStore('session', () => {
             ...c,
             payload: {
               ...c.payload,
-              unread: 0
+              unread: unreadCount
             }
           }
         }
@@ -318,11 +452,11 @@ export const useSessionStore = defineStore('session', () => {
       }
 
       await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [confirmedMessage]))
-      
-      const filtered = (messagesByConversation.value[convId] ?? []).filter(m => m.msgId !== clientMsgId)
+
+      const currentMessages = messagesByConversation.value[convId] ?? []
       messagesByConversation.value = {
         ...messagesByConversation.value,
-        [convId]: [...filtered, confirmedMessage].sort((a, b) => a.sendTime - b.sendTime)
+        [convId]: upsertMessages(currentMessages, [confirmedMessage])
       }
     } catch (error) {
       console.error('Failed to send message:', error)
@@ -394,13 +528,11 @@ export const useSessionStore = defineStore('session', () => {
       }
 
       await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [confirmedMessage]))
-      
-      const filtered = (messagesByConversation.value[convId] ?? []).filter(
-        m => m.msgId !== clientMsgId && m.clientMsgId !== clientMsgId
-      )
+
+      const currentMessages = messagesByConversation.value[convId] ?? []
       messagesByConversation.value = {
         ...messagesByConversation.value,
-        [convId]: [...filtered, confirmedMessage].sort((a, b) => a.sendTime - b.sendTime)
+        [convId]: upsertMessages(currentMessages, [confirmedMessage])
       }
       toast.success('消息已重新发送')
     } catch (error) {
@@ -432,10 +564,11 @@ export const useSessionStore = defineStore('session', () => {
       const userUuid = currentUserUuid.value
       const convId = activeConvId.value
       const currentMessages = messagesByConversation.value[convId] ?? []
-      
-      messagesByConversation.value[convId] = currentMessages.map(m => {
+
+      let recalledMessage: MessageRow | null = null
+      const nextMessages = currentMessages.map(m => {
         if (m.msgId === msgId) {
-          const updated = {
+          recalledMessage = {
             ...m,
             status: 1,
             payload: {
@@ -443,11 +576,22 @@ export const useSessionStore = defineStore('session', () => {
               text: '消息已撤回'
             }
           }
-          safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [updated]))
-          return updated
+          return recalledMessage
         }
         return m
       })
+
+      if (!recalledMessage) {
+        return
+      }
+      const persistedMessage: MessageRow = recalledMessage
+
+      messagesByConversation.value = {
+        ...messagesByConversation.value,
+        [convId]: nextMessages
+      }
+
+      await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [persistedMessage]))
     } catch (error) {
       console.error('Failed to recall message:', error)
     }
@@ -456,7 +600,7 @@ export const useSessionStore = defineStore('session', () => {
   async function deleteConv(convId: string): Promise<void> {
     if (!currentUserUuid.value) return
     try {
-      await httpClient.delete(`/api/v1/auth/conversations/${convId}`)
+      await httpClient.delete(`/api/v1/auth/conversations/${encodeURIComponent(convId)}`)
       conversations.value = conversations.value.filter(c => c.convId !== convId)
       if (activeConvId.value === convId) {
         activeConvId.value = conversations.value[0]?.convId ?? ''
@@ -540,22 +684,54 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   // WS Handlers
-  async function handleIncomingMessage(userUuid: string, item: any): Promise<void> {
+  async function handleIncomingMessage(userUuid: string, item: any): Promise<number> {
     const convId = item.convId
     const mapped = mapMsgItemToRow(userUuid, item)
+    const currentList = messagesByConversation.value[convId] ?? []
+    const knownMessages =
+      currentList.length > 0
+        ? currentList
+        : await safeRead(
+            () => window.api.localdb.chat.getMessages(userUuid, convId, undefined, 100),
+            []
+          )
+    const previousMaxSeq = getMaxMessageSeq(knownMessages)
+    let pulledRows: MessageRow[] = []
 
-    await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [mapped]))
+    if ((mapped.seq ?? 0) > previousMaxSeq + 1) {
+      try {
+        pulledRows = await pullMessageRows(userUuid, convId, {
+          anchorSeq: previousMaxSeq,
+          direction: 1,
+          followHasMore: true
+        })
+      } catch (error) {
+        console.warn('Failed to pull message gap from server, keeping pushed message only', error)
+      }
+    }
+
+    const rowsToPersist = upsertMessages(pulledRows, [mapped])
+    const mergedMessages = upsertMessages(knownMessages, rowsToPersist)
+
+    await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, rowsToPersist))
+
+    if (!conversations.value.some((conversation) => conversation.convId === convId)) {
+      await syncConversationsFromServer(userUuid)
+    }
 
     if (activeConvId.value === convId) {
-      const list = messagesByConversation.value[convId] ?? []
-      const filtered = list.filter(m => m.msgId !== mapped.msgId && m.clientMsgId !== mapped.clientMsgId)
       messagesByConversation.value = {
         ...messagesByConversation.value,
-        [convId]: [...filtered, mapped].sort((a, b) => a.sendTime - b.sendTime)
+        [convId]: mergedMessages
       }
 
       if (mapped.seq) {
         await markRead(convId, mapped.seq)
+      }
+    } else if (messagesByConversation.value[convId]) {
+      messagesByConversation.value = {
+        ...messagesByConversation.value,
+        [convId]: mergedMessages
       }
     } else {
       conversations.value = conversations.value.map(c => {
@@ -580,53 +756,55 @@ export const useSessionStore = defineStore('session', () => {
 
       // Show toast if we are not actively viewing this conversation OR if the window is blurred
       if (activeConvId.value !== convId || !document.hasFocus()) {
-        const appStore = useAppStore()
-        if (!appStore.toastEnabled) return
+          const appStore = useAppStore()
+          if (appStore.toastEnabled) {
+            const friendStore = useFriendStore()
+            const groupStore = useGroupStore()
 
-        const friendStore = useFriendStore()
-        const groupStore = useGroupStore()
-        
-        let senderName = '未知用户'
-        const friend = friendStore.friends.find(f => f.peerUuid === item.fromUuid)
-        if (friend) {
-          senderName = (friend.payload.remark as string) || (friend.payload.nickname as string) || item.fromUuid
-        } else {
-          const member = groupStore.activeMembers.find(m => m.userUuid === item.fromUuid)
-          if (member) {
-            senderName = member.nickname || item.fromUuid
+            let senderName = '未知用户'
+          const friend = friendStore.friends.find(f => f.peerUuid === item.fromUuid)
+          if (friend) {
+            senderName = (friend.payload.remark as string) || (friend.payload.nickname as string) || item.fromUuid
+          } else {
+            const member = groupStore.activeMembers.find(m => m.userUuid === item.fromUuid)
+            if (member) {
+              senderName = member.nickname || item.fromUuid
+            }
           }
-        }
 
-        const conv = conversations.value.find(c => c.convId === convId)
-        const isGroup = conv?.payload.convType === 2
-        const preview = mapped.payload.text || '发送了一条消息'
+          const conv = conversations.value.find(c => c.convId === convId)
+          const isGroup = conv?.payload.convType === 2
+          const preview = mapped.payload.text || '发送了一条消息'
 
-        if (isGroup) {
-          const groupName = conv?.payload.title || '群组'
-          toast.info(`${groupName} | ${senderName}: ${preview}`, {
-            duration: 4500,
-            action: {
-              label: '查看',
-              onClick: () => {
-                appStore.setActiveNav('chat')
-                openConversation(convId)
+          if (isGroup) {
+            const groupName = conv?.payload.title || '群组'
+            toast.info(`${groupName} | ${senderName}: ${preview}`, {
+              duration: 4500,
+              action: {
+                label: '查看',
+                onClick: () => {
+                  appStore.setActiveNav('chat')
+                  openConversation(convId)
+                }
               }
-            }
-          })
-        } else {
-          toast.info(`${senderName}: ${preview}`, {
-            duration: 4500,
-            action: {
-              label: '查看',
-              onClick: () => {
-                appStore.setActiveNav('chat')
-                openConversation(convId)
+            })
+          } else {
+            toast.info(`${senderName}: ${preview}`, {
+              duration: 4500,
+              action: {
+                label: '查看',
+                onClick: () => {
+                  appStore.setActiveNav('chat')
+                  openConversation(convId)
+                }
               }
-            }
-          })
+            })
+          }
         }
       }
     }
+
+    return resolveAckSeq(previousMaxSeq, mergedMessages, mapped.seq)
   }
 
   async function handleIncomingRecall(userUuid: string, notice: any): Promise<void> {
@@ -639,26 +817,31 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     const target = messages.find(m => m.msgId === msgId)
-    if (target) {
-      target.status = 1
-      target.payload.text = '消息已撤回'
-      await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [target]))
+    if (!target) {
+      return
     }
 
+    const recalledMessage: MessageRow = {
+      ...target,
+      status: 1,
+      payload: {
+        ...target.payload,
+        text: '消息已撤回'
+      }
+    }
+
+    await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [recalledMessage]))
+
     if (messagesByConversation.value[convId]) {
-      messagesByConversation.value[convId] = messagesByConversation.value[convId].map(m => {
-        if (m.msgId === msgId) {
-          return {
-            ...m,
-            status: 1,
-            payload: {
-              ...m.payload,
-              text: '消息已撤回'
-            }
+      messagesByConversation.value = {
+        ...messagesByConversation.value,
+        [convId]: messagesByConversation.value[convId].map(m => {
+          if (m.msgId === msgId) {
+            return recalledMessage
           }
-        }
-        return m
-      })
+          return m
+        })
+      }
     }
   }
 

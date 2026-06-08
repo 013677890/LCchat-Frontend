@@ -15,7 +15,7 @@ const refreshClient = axios.create({
 
 export async function refreshSessionToken(): Promise<SessionData | null> {
   const currentSession = await window.api.session.get()
-  if (!currentSession?.refreshToken || !currentSession.userUuid) {
+  if (!currentSession?.refreshToken || !currentSession.userUuid || !currentSession.deviceId) {
     return null
   }
 

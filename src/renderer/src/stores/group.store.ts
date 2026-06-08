@@ -36,6 +36,23 @@ import {
   type MyJoinApplicationItemDTO
 } from '../modules/group/api'
 
+const MAX_GROUP_PAGE_ROUNDS = 50
+const GROUP_PAGE_SIZE = 50
+
+function toFiniteNumber(value: number | string | undefined): number {
+  const normalized = Number(value ?? 0)
+  return Number.isFinite(normalized) ? normalized : 0
+}
+
+function hasNextPage(page: number, pageSize: number, total: number | string, itemCount: number): boolean {
+  const totalCount = toFiniteNumber(total)
+  if (totalCount > 0) {
+    return page * pageSize < totalCount
+  }
+
+  return itemCount >= pageSize
+}
+
 export const useGroupStore = defineStore('group', () => {
   const groups = shallowRef<GroupInfoDTO[]>([])
   const activeGroup = ref<GroupInfoDTO | null>(null)
@@ -119,20 +136,26 @@ export const useGroupStore = defineStore('group', () => {
   }
 
   async function syncJoinRequests() {
-    // If user owns or is admin of any groups, sync pending join requests
+    if (!authStore.isAuthenticated) return
+    if (groups.value.length === 0) {
+      await syncGroups()
+    }
+
     for (const group of groups.value) {
-      const isOwner = group.ownerUuid === authStore.userUuid
-      const isAdmin = activeMembers.value.some(m => m.userUuid === authStore.userUuid && m.role === 1)
-      if (isOwner || isAdmin) {
-        try {
-          const resp = await apiFetchJoinRequests(group.groupUuid, { page: 1, pageSize: 50 })
-          joinRequests.value = {
-            ...joinRequests.value,
-            [group.groupUuid]: resp.data.items || []
-          }
-          await syncPendingCount(group.groupUuid)
-        } catch (e) {
-          // Ignore
+      try {
+        const items = await fetchAllJoinRequests(group.groupUuid)
+        joinRequests.value = {
+          ...joinRequests.value,
+          [group.groupUuid]: items
+        }
+        await syncPendingCount(group.groupUuid)
+      } catch (e) {
+        const nextRequests = { ...joinRequests.value }
+        delete nextRequests[group.groupUuid]
+        joinRequests.value = nextRequests
+        pendingRequestsCount.value = {
+          ...pendingRequestsCount.value,
+          [group.groupUuid]: 0
         }
       }
     }
@@ -243,19 +266,46 @@ export const useGroupStore = defineStore('group', () => {
 
   async function syncMyJoinApplications() {
     try {
-      const resp = await apiFetchMyJoinGroupApplications({ page: 1, pageSize: 50 })
-      myJoinApplications.value = resp.data.items || []
+      const items: MyJoinApplicationItemDTO[] = []
+      let page = 1
+      let shouldContinue = true
+
+      while (shouldContinue && page <= MAX_GROUP_PAGE_ROUNDS) {
+        const resp = await apiFetchMyJoinGroupApplications({ page, pageSize: GROUP_PAGE_SIZE })
+        const pageItems = resp.data.items || []
+        items.push(...pageItems)
+        shouldContinue = hasNextPage(page, GROUP_PAGE_SIZE, resp.data.total, pageItems.length)
+        page += 1
+      }
+
+      myJoinApplications.value = items
     } catch (e) {
       console.error(e)
     }
   }
 
+  async function fetchAllJoinRequests(groupUuid: string): Promise<JoinRequestItemDTO[]> {
+    const items: JoinRequestItemDTO[] = []
+    let page = 1
+    let shouldContinue = true
+
+    while (shouldContinue && page <= MAX_GROUP_PAGE_ROUNDS) {
+      const resp = await apiFetchJoinRequests(groupUuid, { page, pageSize: GROUP_PAGE_SIZE })
+      const pageItems = resp.data.items || []
+      items.push(...pageItems)
+      shouldContinue = hasNextPage(page, GROUP_PAGE_SIZE, resp.data.total, pageItems.length)
+      page += 1
+    }
+
+    return items
+  }
+
   async function syncJoinRequestsForGroup(groupUuid: string) {
     try {
-      const resp = await apiFetchJoinRequests(groupUuid, { page: 1, pageSize: 50 })
+      const items = await fetchAllJoinRequests(groupUuid)
       joinRequests.value = {
         ...joinRequests.value,
-        [groupUuid]: resp.data.items || []
+        [groupUuid]: items
       }
       await syncPendingCount(groupUuid)
     } catch (e) {

@@ -74,10 +74,10 @@ function handleNavChange(nextNav: MainNavKey) {
   }
 }
 
-function handleLogout() {
+async function handleLogout() {
   connStore.disconnect()
-  authStore.signOut()
-  router.replace('/login')
+  await authStore.signOut()
+  await router.replace('/login')
 }
 
 // ------ Profile Modal Logic ------
@@ -94,8 +94,6 @@ const profileEditorData = computed(() => {
   const gender = typeof payload.gender === 'number' ? payload.gender : 0
   return {
     uuid: (payload.uuid as string) || authStore.userUuid,
-    email: payload.email as string,
-    telephone: payload.telephone as string,
     avatar: resolveAssetUrl(payload.avatar as string),
     nickname: payload.nickname as string,
     gender: gender === 1 || gender === 2 || gender === 3 ? gender : 3,

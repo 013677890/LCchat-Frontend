@@ -34,6 +34,14 @@ export interface FriendChangeRow {
   updatedAt?: number
 }
 
+export interface SyncStateRow {
+  userUuid: string
+  domain: string
+  lastVersion: number
+  cursor: string
+  updatedAt: number
+}
+
 export interface FriendApplyRow {
   userUuid: string
   applyId: number

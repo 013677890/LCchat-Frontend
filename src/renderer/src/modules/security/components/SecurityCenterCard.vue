@@ -43,12 +43,18 @@ const deletePassword = ref('')
 const deleteReason = ref('')
 const deleteConfirmText = ref('')
 
+const normalizedCurrentEmail = computed(() => props.currentEmail.trim())
+const isDifferentFromKnownEmail = computed(() => {
+  const targetEmail = newEmail.value.trim()
+  return !normalizedCurrentEmail.value || targetEmail !== normalizedCurrentEmail.value
+})
+
 const canSendCode = computed(() => {
   return (
     !props.sendingCode &&
     (props.codeCooldownSeconds || 0) <= 0 &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.value.trim()) &&
-    newEmail.value.trim() !== props.currentEmail
+    isDifferentFromKnownEmail.value
   )
 })
 
@@ -57,7 +63,7 @@ const canSubmitEmail = computed(() => {
     !props.savingEmail &&
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.value.trim()) &&
     verifyCode.value.trim().length === 6 &&
-    newEmail.value.trim() !== props.currentEmail
+    isDifferentFromKnownEmail.value
   )
 })
 
@@ -145,7 +151,7 @@ function handleSubmitDelete(): void {
   <section class="security-card">
     <header class="security-header">
       <h3>安全设置</h3>
-      <p>当前邮箱：{{ props.currentEmail || '-' }}</p>
+      <p v-if="props.currentEmail">当前邮箱：{{ props.currentEmail }}</p>
     </header>
 
     <div class="security-grid">

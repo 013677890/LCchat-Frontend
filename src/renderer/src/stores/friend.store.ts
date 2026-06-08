@@ -103,11 +103,13 @@ export const useFriendStore = defineStore('friend', () => {
   const friends = shallowRef<FriendRow[]>([])
   const tagSuggestions = shallowRef<FriendTagSuggestion[]>([])
   const version = ref(0)
+  const syncCursor = ref('')
 
   function reset(): void {
     friends.value = []
     tagSuggestions.value = []
     version.value = 0
+    syncCursor.value = ''
   }
 
   async function loadFriends(userUuid: string): Promise<void> {
@@ -120,42 +122,64 @@ export const useFriendStore = defineStore('friend', () => {
       const localRows = await window.api.localdb.friends.getList(userUuid)
       friends.value = localRows.map(normalizeFriendRowAvatar)
       tagSuggestions.value = buildTagSuggestions(friends.value)
-      version.value = getLocalVersion(friends.value)
+      const localVersion = getLocalVersion(friends.value)
+      const syncState = await window.api.localdb.friends.getSyncState(userUuid)
+      version.value = Math.max(syncState?.lastVersion ?? 0, localVersion)
+      syncCursor.value = syncState?.cursor ?? ''
     } catch (error) {
       console.warn('load friends from localdb failed', error)
       friends.value = []
       tagSuggestions.value = []
       version.value = 0
+      syncCursor.value = ''
     }
   }
 
   async function replaceAll(
     userUuid: string,
     items: FriendRow[],
-    latestVersion: number
+    latestVersion: number,
+    nextCursor = ''
   ): Promise<void> {
     try {
-      await window.api.localdb.friends.replaceAll(userUuid, items, latestVersion)
+      await window.api.localdb.friends.replaceAll(userUuid, items, latestVersion, nextCursor)
     } catch (error) {
       console.warn('replace friends in localdb failed', error)
     }
     friends.value = [...items]
     tagSuggestions.value = buildTagSuggestions(items)
     version.value = latestVersion
+    syncCursor.value = nextCursor
   }
 
   async function applyChanges(
     userUuid: string,
     changes: FriendChangeRow[],
-    latestVersion: number
+    latestVersion: number,
+    nextCursor: string
   ): Promise<void> {
     try {
-      await window.api.localdb.friends.applyChanges(userUuid, changes, latestVersion)
+      await window.api.localdb.friends.applyChanges(userUuid, changes, latestVersion, nextCursor)
     } catch (error) {
       console.warn('apply friend changes in localdb failed', error)
     }
     await loadFriends(userUuid)
     version.value = latestVersion
+    syncCursor.value = nextCursor
+  }
+
+  async function saveSyncState(
+    userUuid: string,
+    latestVersion: number,
+    nextCursor: string
+  ): Promise<void> {
+    try {
+      await window.api.localdb.friends.saveSyncState(userUuid, latestVersion, nextCursor)
+    } catch (error) {
+      console.warn('save friend sync state failed', error)
+    }
+    version.value = latestVersion
+    syncCursor.value = nextCursor
   }
 
   async function pullFullListFromServer(userUuid: string): Promise<void> {
@@ -181,7 +205,7 @@ export const useFriendStore = defineStore('friend', () => {
       page += 1
     }
 
-    await replaceAll(userUuid, mergedRows, latestVersion)
+    await replaceAll(userUuid, mergedRows, latestVersion, '')
   }
 
   async function syncFromServer(userUuid: string): Promise<void> {
@@ -198,6 +222,7 @@ export const useFriendStore = defineStore('friend', () => {
     }
 
     let cursorVersion = version.value
+    let cursor = syncCursor.value
     let hasMore = true
     let rounds = 0
 
@@ -208,7 +233,8 @@ export const useFriendStore = defineStore('friend', () => {
       try {
         syncResponse = await syncFriendList({
           version: cursorVersion,
-          limit: 200
+          limit: 200,
+          ...(cursor ? { cursor } : {})
         })
       } catch (error) {
         console.warn('friend sync failed', error)
@@ -217,11 +243,15 @@ export const useFriendStore = defineStore('friend', () => {
 
       const changes = (syncResponse.data.changes ?? []).map(mapSyncChangeToRow)
       const latestVersion = syncResponse.data.latestVersion || cursorVersion
+      const nextCursor = syncResponse.data.nextCursor ?? ''
       if (changes.length > 0 || latestVersion !== cursorVersion) {
-        await applyChanges(userUuid, changes, latestVersion)
+        await applyChanges(userUuid, changes, latestVersion, nextCursor)
+      } else if (nextCursor !== cursor) {
+        await saveSyncState(userUuid, latestVersion, nextCursor)
       }
 
       cursorVersion = latestVersion
+      cursor = nextCursor
       hasMore = Boolean(syncResponse.data.hasMore)
     }
   }
@@ -274,7 +304,8 @@ export const useFriendStore = defineStore('friend', () => {
           updatedAt: Date.now()
         }
       ],
-      version.value
+      version.value,
+      syncCursor.value
     )
     await syncFromServer(userUuid)
   }
@@ -313,7 +344,8 @@ export const useFriendStore = defineStore('friend', () => {
           updatedAt: Date.now()
         }
       ],
-      version.value
+      version.value,
+      syncCursor.value
     )
     await syncFromServer(userUuid)
   }
@@ -322,6 +354,7 @@ export const useFriendStore = defineStore('friend', () => {
     friends,
     tagSuggestions,
     version,
+    syncCursor,
     reset,
     loadFriends,
     replaceAll,

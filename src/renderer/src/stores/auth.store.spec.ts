@@ -75,13 +75,7 @@ describe('auth.store', () => {
         userInfo: {
           uuid: 'user-1',
           nickname: 'Tester',
-          telephone: '',
-          email: 'demo@test.com',
-          avatar: '',
-          gender: 0,
-          signature: '',
-          birthday: '',
-          status: 0
+          avatar: ''
         }
       }
     })
@@ -171,13 +165,7 @@ describe('auth.store', () => {
         userInfo: {
           uuid: 'user-2',
           nickname: 'CodeUser',
-          telephone: '',
-          email: 'demo@test.com',
-          avatar: '',
-          gender: 0,
-          signature: '',
-          birthday: '',
-          status: 0
+          avatar: ''
         }
       }
     })

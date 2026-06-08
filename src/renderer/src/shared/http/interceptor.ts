@@ -125,7 +125,14 @@ async function retryWithFreshToken(
 ): Promise<AxiosResponse> {
   config._retried = true
 
-  const nextSession = await refreshSessionOnce()
+  let nextSession: SessionData | null
+  try {
+    nextSession = await refreshSessionOnce()
+  } catch (error) {
+    await window.api.session.clear()
+    throw error
+  }
+
   if (!nextSession?.accessToken) {
     await window.api.session.clear()
     throw new Error('登录状态已失效，请重新登录')

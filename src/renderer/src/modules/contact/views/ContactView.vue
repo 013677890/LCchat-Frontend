@@ -359,10 +359,14 @@ async function handleGroupQuitOrDissolve() {
   if (confirm(msg)) {
     try {
       if (isOwner) {
-        await groupStore.dissolveGroup(selectedGroup.value.groupUuid)
+        const groupUuid = selectedGroup.value.groupUuid
+        await groupStore.dissolveGroup(groupUuid)
+        await sessionStore.deleteConv(groupUuid)
         toast.success('群聊已成功解散')
       } else {
-        await groupStore.quitGroup(selectedGroup.value.groupUuid)
+        const groupUuid = selectedGroup.value.groupUuid
+        await groupStore.quitGroup(groupUuid)
+        await sessionStore.deleteConv(groupUuid)
         toast.success('已成功退出该群聊')
       }
       selectedGroupId.value = ''

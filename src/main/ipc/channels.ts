@@ -16,7 +16,9 @@ export const IPC_CHANNELS = {
     friends: {
       getList: 'localdb:friends:get-list',
       replaceAll: 'localdb:friends:replace-all',
-      applyChanges: 'localdb:friends:apply-changes'
+      applyChanges: 'localdb:friends:apply-changes',
+      getSyncState: 'localdb:friends:get-sync-state',
+      saveSyncState: 'localdb:friends:save-sync-state'
     },
     applies: {
       getInbox: 'localdb:applies:get-inbox',

@@ -34,13 +34,10 @@ function toProfilePayload(userUuid: string, userInfo: UserProfileDTO): JsonObjec
   return {
     uuid: typeof userInfo.uuid === 'string' ? userInfo.uuid : userUuid,
     nickname: typeof userInfo.nickname === 'string' ? userInfo.nickname : '',
-    telephone: typeof userInfo.telephone === 'string' ? userInfo.telephone : '',
-    email: typeof userInfo.email === 'string' ? userInfo.email : '',
     avatar: resolveAssetUrl(typeof userInfo.avatar === 'string' ? userInfo.avatar : ''),
     gender: typeof userInfo.gender === 'number' ? userInfo.gender : 0,
     signature: typeof userInfo.signature === 'string' ? userInfo.signature : '',
-    birthday: typeof userInfo.birthday === 'string' ? userInfo.birthday : '',
-    status: typeof userInfo.status === 'number' ? userInfo.status : 0
+    birthday: typeof userInfo.birthday === 'string' ? userInfo.birthday : ''
   }
 }
 

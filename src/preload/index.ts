@@ -32,14 +32,35 @@ const api: BridgeApi = {
     friends: {
       getList: (userUuid: string) =>
         ipcRenderer.invoke(IPC_CHANNELS.localdb.friends.getList, userUuid),
-      replaceAll: (userUuid: string, items: FriendRow[], version: number) =>
-        ipcRenderer.invoke(IPC_CHANNELS.localdb.friends.replaceAll, userUuid, items, version),
-      applyChanges: (userUuid: string, changes: FriendChangeRow[], latestVersion: number) =>
+      replaceAll: (userUuid: string, items: FriendRow[], version: number, cursor: string) =>
+        ipcRenderer.invoke(
+          IPC_CHANNELS.localdb.friends.replaceAll,
+          userUuid,
+          items,
+          version,
+          cursor
+        ),
+      applyChanges: (
+        userUuid: string,
+        changes: FriendChangeRow[],
+        latestVersion: number,
+        cursor: string
+      ) =>
         ipcRenderer.invoke(
           IPC_CHANNELS.localdb.friends.applyChanges,
           userUuid,
           changes,
-          latestVersion
+          latestVersion,
+          cursor
+        ),
+      getSyncState: (userUuid: string) =>
+        ipcRenderer.invoke(IPC_CHANNELS.localdb.friends.getSyncState, userUuid),
+      saveSyncState: (userUuid: string, latestVersion: number, cursor: string) =>
+        ipcRenderer.invoke(
+          IPC_CHANNELS.localdb.friends.saveSyncState,
+          userUuid,
+          latestVersion,
+          cursor
         )
     },
     applies: {

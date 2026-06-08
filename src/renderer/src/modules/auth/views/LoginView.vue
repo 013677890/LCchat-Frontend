@@ -5,7 +5,6 @@ import type { VerifyCodeType } from '../api'
 import { useAuthStore } from '../../../stores/auth.store'
 import { useDeviceStore } from '../../../stores/device.store'
 import { useSessionStore } from '../../../stores/session.store'
-import { normalizeErrorMessage } from '../../../shared/utils/error'
 import { resolveAuthErrorMessage, type AuthAction } from '../error-message'
 
 type AuthMode = 'password' | 'code' | 'register' | 'reset'
@@ -215,20 +214,6 @@ async function handleSubmit(): Promise<void> {
   }
 }
 
-async function handleDemoLogin(): Promise<void> {
-  loading.value = true
-  clearFeedback()
-
-  try {
-    await authStore.signInWithDemoAccount(account.value || 'demo-user')
-    await signInAndEnterWorkspace()
-  } catch (error) {
-    errorMessage.value = normalizeErrorMessage(error)
-  } finally {
-    loading.value = false
-  }
-}
-
 onMounted(async () => {
   deviceId.value = await deviceStore.ensureDeviceId()
 })
@@ -277,7 +262,7 @@ onBeforeUnmount(() => {
       <div v-if="mode === 'password'" class="form-grid">
         <label class="field">
           <span>账号（邮箱或手机号）</span>
-          <input v-model.trim="account" placeholder="例如: demo@test.com" />
+          <input v-model.trim="account" placeholder="例如: user@example.com" />
         </label>
         <label class="field">
           <span>密码</span>
@@ -360,15 +345,6 @@ onBeforeUnmount(() => {
           <template v-else-if="mode === 'code'">验证码登录</template>
           <template v-else-if="mode === 'register'">注册账号</template>
           <template v-else>确认重置</template>
-        </button>
-        <button
-          v-if="mode === 'password'"
-          type="button"
-          class="secondary"
-          :disabled="loading"
-          @click="handleDemoLogin"
-        >
-          演示登录
         </button>
       </div>
     </section>

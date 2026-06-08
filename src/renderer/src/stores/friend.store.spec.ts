@@ -17,6 +17,8 @@ const syncFriendListMock = vi.mocked(syncFriendList)
 const localdbGetListMock = vi.fn().mockResolvedValue([])
 const localdbReplaceAllMock = vi.fn().mockResolvedValue(undefined)
 const localdbApplyChangesMock = vi.fn().mockResolvedValue(undefined)
+const localdbGetSyncStateMock = vi.fn().mockResolvedValue(null)
+const localdbSaveSyncStateMock = vi.fn().mockResolvedValue(undefined)
 
 function setupWindowApi(): void {
   ;(globalThis as { window?: unknown }).window = {
@@ -25,7 +27,9 @@ function setupWindowApi(): void {
         friends: {
           getList: localdbGetListMock,
           replaceAll: localdbReplaceAllMock,
-          applyChanges: localdbApplyChangesMock
+          applyChanges: localdbApplyChangesMock,
+          getSyncState: localdbGetSyncStateMock,
+          saveSyncState: localdbSaveSyncStateMock
         }
       }
     }
@@ -53,7 +57,8 @@ describe('friend.store', () => {
       data: {
         changes: [],
         hasMore: false,
-        latestVersion: 12
+        latestVersion: 12,
+        nextCursor: ''
       }
     } as never)
 
@@ -71,7 +76,7 @@ describe('friend.store', () => {
       version: 12,
       limit: 200
     })
-    expect(localdbReplaceAllMock).toHaveBeenCalledWith('user-1', [], 12)
+    expect(localdbReplaceAllMock).toHaveBeenCalledWith('user-1', [], 12, '')
   })
 
   it('stops at pagination boundaries for full pull and incremental sync', async () => {
@@ -90,7 +95,8 @@ describe('friend.store', () => {
       data: {
         changes: [],
         hasMore: true,
-        latestVersion: 3
+        latestVersion: 3,
+        nextCursor: ''
       }
     } as never)
 
@@ -109,5 +115,49 @@ describe('friend.store', () => {
     expect(syncFriendListMock).toHaveBeenCalledTimes(20)
     expect(localdbReplaceAllMock).toHaveBeenCalledTimes(1)
     expect(localdbApplyChangesMock).not.toHaveBeenCalled()
+  })
+
+  it('uses the server nextCursor for the following incremental sync page', async () => {
+    fetchFriendListMock.mockResolvedValue({
+      data: {
+        items: [],
+        pagination: {
+          totalPages: 1
+        },
+        version: 10
+      }
+    } as never)
+    syncFriendListMock
+      .mockResolvedValueOnce({
+        data: {
+          changes: [],
+          hasMore: true,
+          latestVersion: 10,
+          nextCursor: '10:user-a'
+        }
+      } as never)
+      .mockResolvedValueOnce({
+        data: {
+          changes: [],
+          hasMore: false,
+          latestVersion: 10,
+          nextCursor: '10:user-b'
+        }
+      } as never)
+
+    const store = useFriendStore()
+    await store.syncFromServer('user-1')
+
+    expect(syncFriendListMock).toHaveBeenNthCalledWith(1, {
+      version: 10,
+      limit: 200
+    })
+    expect(syncFriendListMock).toHaveBeenNthCalledWith(2, {
+      version: 10,
+      limit: 200,
+      cursor: '10:user-a'
+    })
+    expect(localdbSaveSyncStateMock).toHaveBeenLastCalledWith('user-1', 10, '10:user-b')
+    expect(store.syncCursor).toBe('10:user-b')
   })
 })
