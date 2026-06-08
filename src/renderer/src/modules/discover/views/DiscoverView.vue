@@ -277,7 +277,8 @@ async function handleDirectJoinGroup(groupUuid: string, groupName: string) {
           sessionStore,
           router,
           targetUuid: groupUuid,
-          convType: 2
+          convType: 2,
+          currentUserUuid: authStore.userUuid
         })
       } catch (err) {
         console.error(err)
@@ -295,7 +296,8 @@ async function handleStartP2PChat(peerUuid: string) {
       sessionStore,
       router,
       targetUuid: peerUuid,
-      convType: 1
+      convType: 1,
+      currentUserUuid: authStore.userUuid
     })
   } catch (error) {
     toast.error('无法发起聊天：' + normalizeErrorMessage(error))

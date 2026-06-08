@@ -33,6 +33,7 @@ import { buildP2PConversationId, useSessionStore } from '../../../stores/session
 import { useAppStore } from '../../../stores/app.store'
 import { toast } from 'vue-sonner'
 import SkeletonLoader from '../../../shared/components/SkeletonLoader.vue'
+import { normalizeErrorMessage } from '../../../shared/utils/error'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -257,11 +258,18 @@ async function handleDeleteFriend() {
 
 // Redirect to chat
 async function startChat(uuid: string, convType: number) {
+  if (!authStore.userUuid) {
+    toast.error('无法发起聊天：当前登录状态未就绪')
+    return
+  }
+
   try {
+    await sessionStore.bootstrap(authStore.userUuid)
     await sessionStore.startConversation(uuid, convType)
-    router.push('/')
+    await router.push('/')
   } catch (error) {
     console.error('Failed to open chat from Contact:', error)
+    toast.error('无法发起聊天：' + normalizeErrorMessage(error))
   }
 }
 

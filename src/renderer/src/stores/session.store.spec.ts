@@ -142,6 +142,13 @@ describe('session.store message pull', () => {
     expect(buildP2PConversationId('user-a', 'user-b')).toBe('p2p-user-a-user-b')
   })
 
+  it('rejects starting a conversation before the current user is initialized', async () => {
+    const store = useSessionStore()
+
+    await expect(store.startConversation('peer-1', 1)).rejects.toThrow('缺少当前用户')
+    expect(upsertConversationsMock).not.toHaveBeenCalled()
+  })
+
   it('pulls newer messages from the local max seq when cache exists', async () => {
     getMessagesMock.mockResolvedValueOnce([cachedMsg(3)])
     httpGetMock.mockResolvedValueOnce({

@@ -971,17 +971,26 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function startConversation(targetUuid: string, convType: number): Promise<string> {
+    const userUuid = currentUserUuid.value
+    const normalizedTargetUuid = targetUuid.trim()
+    if (!userUuid) {
+      throw new Error('缺少当前用户，无法创建会话')
+    }
+    if (!normalizedTargetUuid) {
+      throw new Error('缺少聊天对象')
+    }
+
     let convId = ''
     if (convType === 2) {
-      convId = targetUuid
+      convId = normalizedTargetUuid
     } else {
-      convId = buildP2PConversationId(currentUserUuid.value, targetUuid)
+      convId = buildP2PConversationId(userUuid, normalizedTargetUuid)
     }
 
     const found = conversations.value.find(c => c.convId === convId)
     if (!found) {
       const newConv: ConversationRow = {
-        userUuid: currentUserUuid.value,
+        userUuid,
         convId,
         payload: {
           title: convType === 2 ? '群聊' : '单聊',
@@ -990,13 +999,13 @@ export const useSessionStore = defineStore('session', () => {
           mute: false,
           pin: false,
           convType,
-          targetUuid,
+          targetUuid: normalizedTargetUuid,
           avatarColor: convType === 2 ? '#6ca06f' : '#7d8da5'
         },
         updatedAt: Date.now()
       }
       conversations.value = [newConv, ...conversations.value]
-      await safeWrite(() => window.api.localdb.chat.upsertConversations(currentUserUuid.value, [newConv]))
+      await safeWrite(() => window.api.localdb.chat.upsertConversations(userUuid, [newConv]))
     }
 
     activeConvId.value = convId
