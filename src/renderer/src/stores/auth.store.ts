@@ -16,6 +16,7 @@ import {
 } from '../modules/auth/api'
 import { buildLoginDeviceInfo } from '../modules/auth/device-info'
 import { logout } from '../modules/security/api'
+import { notifySessionChanged, onSessionChanged } from '../shared/http/session-events'
 
 function buildSessionFromLoginResponse(payload: LoginResponseData, deviceId: string): SessionData {
   const userUuid = payload.userInfo?.uuid
@@ -53,6 +54,10 @@ function buildSessionFromCodeLoginResponse(
 export const useAuthStore = defineStore('auth', () => {
   const session = shallowRef<SessionData | null>(null)
   const hydrated = ref(false)
+  onSessionChanged((nextSession) => {
+    session.value = nextSession
+    hydrated.value = true
+  })
 
   const isAuthenticated = computed(() => Boolean(session.value?.accessToken))
   const userUuid = computed(() => session.value?.userUuid ?? '')
@@ -69,6 +74,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function signIn(nextSession: SessionData): Promise<void> {
     session.value = nextSession
     await window.api.session.set(nextSession)
+    notifySessionChanged(nextSession)
     try {
       await window.api.localdb.init()
     } catch (error) {
@@ -207,6 +213,7 @@ export const useAuthStore = defineStore('auth', () => {
 
     session.value = null
     await window.api.session.clear()
+    notifySessionChanged(null)
   }
 
   return {

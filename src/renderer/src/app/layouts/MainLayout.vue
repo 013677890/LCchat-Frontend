@@ -35,6 +35,7 @@ const { status: connStatus } = storeToRefs(connStore)
 
 const isProfileModalOpen = ref(false)
 const profileSavePending = ref(false)
+let leavingForLogin = false
 
 watch(
   () => route.path,
@@ -75,12 +76,37 @@ function handleNavChange(nextNav: MainNavKey) {
   }
 }
 
+async function leaveAuthenticatedArea(): Promise<void> {
+  if (leavingForLogin) {
+    return
+  }
+
+  leavingForLogin = true
+  connStore.disconnect()
+  await resetAuthenticatedState()
+  await router.replace('/login')
+}
+
 async function handleLogout() {
+  if (leavingForLogin) {
+    return
+  }
+
+  leavingForLogin = true
   connStore.disconnect()
   await authStore.signOut()
   await resetAuthenticatedState()
   await router.replace('/login')
 }
+
+watch(
+  () => authStore.isAuthenticated,
+  (isAuthenticated) => {
+    if (!isAuthenticated) {
+      void leaveAuthenticatedArea()
+    }
+  }
+)
 
 // ------ Profile Modal Logic ------
 function handleAvatarClick() {

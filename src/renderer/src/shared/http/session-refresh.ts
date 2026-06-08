@@ -1,6 +1,7 @@
 import axios from 'axios'
 import type { SessionData } from '../../../../shared/types/localdb'
 import type { ApiResponse } from '../types/api'
+import { notifySessionChanged } from './session-events'
 
 interface RefreshTokenResponseData {
   accessToken: string
@@ -46,5 +47,6 @@ export async function refreshSessionToken(): Promise<SessionData | null> {
   }
 
   await window.api.session.set(nextSession)
+  notifySessionChanged(nextSession)
   return nextSession
 }

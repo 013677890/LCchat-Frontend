@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useAuthStore } from './auth.store'
+import { notifySessionChanged } from '../shared/http/session-events'
 import {
   login,
   loginByCode,
@@ -244,5 +245,31 @@ describe('auth.store', () => {
       verifyCode: '123456',
       newPassword: 'new-password'
     })
+  })
+
+  it('syncs in-memory auth state from external session change events', () => {
+    const store = useAuthStore()
+
+    notifySessionChanged({
+      userUuid: 'user-event',
+      accessToken: 'event-access',
+      refreshToken: 'event-refresh',
+      expiresAt: 1,
+      deviceId: 'device-event'
+    })
+
+    expect(store.session).toEqual(
+      expect.objectContaining({
+        userUuid: 'user-event',
+        accessToken: 'event-access'
+      })
+    )
+    expect(store.hydrated).toBe(true)
+    expect(store.isAuthenticated).toBe(true)
+
+    notifySessionChanged(null)
+
+    expect(store.session).toBeNull()
+    expect(store.isAuthenticated).toBe(false)
   })
 })

@@ -8,6 +8,7 @@ import type { SessionData } from '../../../../shared/types/localdb'
 import type { ApiResponse } from '../types/api'
 import { getDeviceId } from '../utils/device'
 import { refreshSessionToken } from './session-refresh'
+import { notifySessionChanged } from './session-events'
 
 interface ApiBusinessError extends Error {
   bizCode: number
@@ -119,6 +120,11 @@ async function refreshSessionOnce(): Promise<SessionData | null> {
   return refreshPromise
 }
 
+async function clearStoredSession(): Promise<void> {
+  await window.api.session.clear()
+  notifySessionChanged(null)
+}
+
 async function retryWithFreshToken(
   instance: AxiosInstance,
   config: RetryableConfig
@@ -129,12 +135,12 @@ async function retryWithFreshToken(
   try {
     nextSession = await refreshSessionOnce()
   } catch (error) {
-    await window.api.session.clear()
+    await clearStoredSession()
     throw error
   }
 
   if (!nextSession?.accessToken) {
-    await window.api.session.clear()
+    await clearStoredSession()
     throw new Error('登录状态已失效，请重新登录')
   }
 
