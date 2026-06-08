@@ -291,6 +291,8 @@ export const useConnStore = defineStore('conn', () => {
       case 'GROUP_JOIN_REQUEST_REVIEWED':
         console.log('[WS] Event: GROUP_JOIN_REQUEST_REVIEWED')
         await groupStore.syncJoinRequests()
+        await groupStore.syncGroups()
+        await sessionStore.syncConversationsFromServer(userUuid)
         break
 
       case 'GROUP_STATE_CHANGED':
@@ -299,6 +301,7 @@ export const useConnStore = defineStore('conn', () => {
       case 'GROUP_MEMBER_MUTED':
         console.log('[WS] Event:', type)
         await groupStore.syncGroups()
+        await sessionStore.syncConversationsFromServer(userUuid)
         break
 
       case 'error': {
