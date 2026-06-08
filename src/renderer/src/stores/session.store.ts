@@ -201,6 +201,11 @@ function upsertMessages(currentRows: MessageRow[], nextRows: MessageRow[]): Mess
   return merged.sort((a, b) => a.sendTime - b.sendTime)
 }
 
+export function buildP2PConversationId(userUuid: string, targetUuid: string): string {
+  const sorted = [userUuid, targetUuid].sort()
+  return `p2p-${sorted.join('-')}`
+}
+
 export const useSessionStore = defineStore('session', () => {
   const currentUserUuid = ref('')
   const conversations = shallowRef<ConversationRow[]>([])
@@ -970,8 +975,7 @@ export const useSessionStore = defineStore('session', () => {
     if (convType === 2) {
       convId = targetUuid
     } else {
-      const sorted = [currentUserUuid.value, targetUuid].sort()
-      convId = `p2p-${sorted.join('-')}`
+      convId = buildP2PConversationId(currentUserUuid.value, targetUuid)
     }
 
     const found = conversations.value.find(c => c.convId === convId)

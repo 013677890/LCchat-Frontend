@@ -29,7 +29,7 @@ import { useBlacklistStore } from '../../../stores/blacklist.store'
 import { usePresenceStore } from '../../../stores/presence.store'
 import { useAuthStore } from '../../../stores/auth.store'
 import { useGroupStore } from '../../../stores/group.store'
-import { useSessionStore } from '../../../stores/session.store'
+import { buildP2PConversationId, useSessionStore } from '../../../stores/session.store'
 import { useAppStore } from '../../../stores/app.store'
 import { toast } from 'vue-sonner'
 import SkeletonLoader from '../../../shared/components/SkeletonLoader.vue'
@@ -241,10 +241,12 @@ async function startEditTag() {
 }
 
 async function handleDeleteFriend() {
-  if (!selectedFriendId.value) return
+  if (!selectedFriendId.value || !authStore.userUuid) return
   if (confirm('确定要删除该好友吗？此操作不可撤销。')) {
+    const peerUuid = selectedFriendId.value
     try {
-      await friendStore.removeFriend(authStore.userUuid, selectedFriendId.value)
+      await friendStore.removeFriend(authStore.userUuid, peerUuid)
+      await sessionStore.deleteConv(buildP2PConversationId(authStore.userUuid, peerUuid))
       selectedFriendId.value = ''
       toast.success('好友已成功删除')
     } catch (error) {

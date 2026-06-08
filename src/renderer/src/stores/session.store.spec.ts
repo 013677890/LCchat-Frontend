@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
-import { useSessionStore } from './session.store'
+import { buildP2PConversationId, useSessionStore } from './session.store'
 import { httpClient } from '../shared/http/client'
 import type { MessageRow } from '../../../shared/types/localdb'
 
@@ -135,6 +135,11 @@ describe('session.store message pull', () => {
         expect.objectContaining({ msgId: 'msg-5', seq: 5 })
       ])
     )
+  })
+
+  it('builds stable p2p conversation ids from sorted participants', () => {
+    expect(buildP2PConversationId('user-b', 'user-a')).toBe('p2p-user-a-user-b')
+    expect(buildP2PConversationId('user-a', 'user-b')).toBe('p2p-user-a-user-b')
   })
 
   it('pulls newer messages from the local max seq when cache exists', async () => {
