@@ -511,6 +511,32 @@ export function registerLocalDBHandlers(ipcMain: IpcMain): void {
 
   bind(
     ipcMain,
+    IPC_CHANNELS.localdb.chat.replaceConversations,
+    (userUuid: string, items: ConversationRow[]) => {
+      const db = getLocalDB()
+      const replaceConversations = db.transaction((rows: ConversationRow[]) => {
+        db.prepare(`DELETE FROM conversations WHERE user_uuid = ?`).run(userUuid)
+        const stmt = db.prepare(
+          `INSERT INTO conversations(user_uuid, conv_id, payload_json, updated_at)
+           VALUES(@user_uuid, @conv_id, @payload_json, @updated_at)`
+        )
+
+        for (const item of rows) {
+          stmt.run({
+            user_uuid: userUuid,
+            conv_id: item.convId,
+            payload_json: serializePayload(item.payload),
+            updated_at: item.updatedAt || now()
+          })
+        }
+      })
+
+      replaceConversations(items)
+    }
+  )
+
+  bind(
+    ipcMain,
     IPC_CHANNELS.localdb.chat.getMessages,
     (userUuid: string, convId: string, cursor?: number, limit?: number): MessageRow[] => {
       const db = getLocalDB()

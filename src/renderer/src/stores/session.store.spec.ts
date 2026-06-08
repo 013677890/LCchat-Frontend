@@ -15,7 +15,12 @@ vi.mock('../shared/http/client', () => ({
 
 const httpGetMock = httpClient.get as unknown as Mock
 const httpPostMock = httpClient.post as unknown as Mock
+const httpDeleteMock = httpClient.delete as unknown as Mock
 
+const localdbInitMock = vi.fn().mockResolvedValue(undefined)
+const getConversationsMock = vi.fn().mockResolvedValue([])
+const upsertConversationsMock = vi.fn().mockResolvedValue(undefined)
+const replaceConversationsMock = vi.fn().mockResolvedValue(undefined)
 const getMessagesMock = vi.fn().mockResolvedValue([])
 const upsertMessagesMock = vi.fn().mockResolvedValue(undefined)
 const getDraftMock = vi.fn().mockResolvedValue('')
@@ -25,7 +30,11 @@ function setupWindowApi(): void {
   ;(globalThis as { window?: unknown }).window = {
     api: {
       localdb: {
+        init: localdbInitMock,
         chat: {
+          getConversations: getConversationsMock,
+          upsertConversations: upsertConversationsMock,
+          replaceConversations: replaceConversationsMock,
           getMessages: getMessagesMock,
           upsertMessages: upsertMessagesMock,
           getDraft: getDraftMock,
@@ -70,11 +79,24 @@ describe('session.store message pull', () => {
     vi.clearAllMocks()
     setActivePinia(createPinia())
     setupWindowApi()
+    localdbInitMock.mockResolvedValue(undefined)
+    getConversationsMock.mockResolvedValue([])
+    upsertConversationsMock.mockResolvedValue(undefined)
+    replaceConversationsMock.mockResolvedValue(undefined)
+    getMessagesMock.mockResolvedValue([])
+    upsertMessagesMock.mockResolvedValue(undefined)
+    getDraftMock.mockResolvedValue('')
+    saveDraftMock.mockResolvedValue(undefined)
     httpPostMock.mockResolvedValue({
       data: {
         data: {
           unreadCount: 0
         }
+      }
+    })
+    httpDeleteMock.mockResolvedValue({
+      data: {
+        data: null
       }
     })
   })
@@ -305,5 +327,91 @@ describe('session.store message pull', () => {
         })
       })
     )
+  })
+
+  it('replaces the local conversation cache when server sync returns the full list', async () => {
+    httpGetMock.mockResolvedValueOnce({
+      data: {
+        data: {
+          conversations: [],
+          hasMore: false
+        }
+      }
+    })
+
+    const store = useSessionStore()
+    store.currentUserUuid = 'user-1'
+    store.activeConvId = 'stale-conv'
+    store.activeDraft = 'stale draft'
+    store.conversations = [
+      {
+        userUuid: 'user-1',
+        convId: 'stale-conv',
+        payload: {
+          unread: 0,
+          preview: ''
+        },
+        updatedAt: 1
+      }
+    ]
+
+    await store.syncConversationsFromServer('user-1')
+
+    expect(replaceConversationsMock).toHaveBeenCalledWith('user-1', [])
+    expect(store.conversations).toEqual([])
+    expect(store.activeConvId).toBe('')
+    expect(store.activeDraft).toBe('')
+    expect(store.activeMessages).toEqual([])
+  })
+
+  it('persists conversation removal and loads the fallback conversation state', async () => {
+    httpGetMock.mockResolvedValueOnce({
+      data: {
+        data: {
+          messages: [],
+          hasMore: false
+        }
+      }
+    })
+    getDraftMock.mockResolvedValueOnce('next draft')
+
+    const store = useSessionStore()
+    store.currentUserUuid = 'user-1'
+    store.activeConvId = 'conv-1'
+    store.activeDraft = 'old draft'
+    store.conversations = [
+      {
+        userUuid: 'user-1',
+        convId: 'conv-1',
+        payload: {
+          convType: 1,
+          targetUuid: 'peer-1',
+          unread: 0,
+          preview: ''
+        },
+        updatedAt: 2
+      },
+      {
+        userUuid: 'user-1',
+        convId: 'conv-2',
+        payload: {
+          convType: 1,
+          targetUuid: 'peer-2',
+          unread: 0,
+          preview: ''
+        },
+        updatedAt: 1
+      }
+    ]
+
+    await store.deleteConv('conv-1')
+
+    expect(httpDeleteMock).toHaveBeenCalledWith('/api/v1/auth/conversations/conv-1')
+    expect(replaceConversationsMock).toHaveBeenCalledWith('user-1', [
+      expect.objectContaining({ convId: 'conv-2' })
+    ])
+    expect(store.activeConvId).toBe('conv-2')
+    expect(store.activeDraft).toBe('next draft')
+    expect(store.activeMessages).toEqual([])
   })
 })

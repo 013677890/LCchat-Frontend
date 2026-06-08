@@ -35,6 +35,7 @@ export const IPC_CHANNELS = {
     chat: {
       getConversations: 'localdb:chat:get-conversations',
       upsertConversations: 'localdb:chat:upsert-conversations',
+      replaceConversations: 'localdb:chat:replace-conversations',
       getMessages: 'localdb:chat:get-messages',
       upsertMessages: 'localdb:chat:upsert-messages',
       saveDraft: 'localdb:chat:save-draft',

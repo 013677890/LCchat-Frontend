@@ -238,6 +238,30 @@ export const useSessionStore = defineStore('session', () => {
     return messagesByConversation.value[activeConvId.value] ?? []
   })
 
+  function dropConversationRuntimeState(convId: string): void {
+    if (!convId || !messagesByConversation.value[convId]) {
+      return
+    }
+
+    const nextMessages = { ...messagesByConversation.value }
+    delete nextMessages[convId]
+    messagesByConversation.value = nextMessages
+  }
+
+  async function activateFallbackConversation(removedConvId: string): Promise<void> {
+    if (!removedConvId || activeConvId.value !== removedConvId) {
+      return
+    }
+
+    const nextConvId = conversations.value[0]?.convId ?? ''
+    activeConvId.value = nextConvId
+    activeDraft.value = ''
+
+    if (nextConvId) {
+      await openConversation(nextConvId)
+    }
+  }
+
   async function bootstrap(userUuid: string): Promise<void> {
     if (!userUuid) return
 
@@ -300,9 +324,17 @@ export const useSessionStore = defineStore('session', () => {
       }
       
       const mapped = items.map((item: any) => mapConversationItemToRow(userUuid, item))
-      await safeWrite(() => window.api.localdb.chat.upsertConversations(userUuid, mapped))
+      const removedActiveConvId =
+        activeConvId.value && !mapped.some((item) => item.convId === activeConvId.value)
+          ? activeConvId.value
+          : ''
+      await safeWrite(() => window.api.localdb.chat.replaceConversations(userUuid, mapped))
       
       conversations.value = sortConversations(mapped)
+      if (removedActiveConvId) {
+        dropConversationRuntimeState(removedActiveConvId)
+        await activateFallbackConversation(removedActiveConvId)
+      }
     } catch (error) {
       console.error('Failed to sync conversations from server:', error)
     }
@@ -600,11 +632,12 @@ export const useSessionStore = defineStore('session', () => {
   async function deleteConv(convId: string): Promise<void> {
     if (!currentUserUuid.value) return
     try {
+      const userUuid = currentUserUuid.value
       await httpClient.delete(`/api/v1/auth/conversations/${encodeURIComponent(convId)}`)
       conversations.value = conversations.value.filter(c => c.convId !== convId)
-      if (activeConvId.value === convId) {
-        activeConvId.value = conversations.value[0]?.convId ?? ''
-      }
+      await safeWrite(() => window.api.localdb.chat.replaceConversations(userUuid, conversations.value))
+      dropConversationRuntimeState(convId)
+      await activateFallbackConversation(convId)
     } catch (e) {
       console.error(e)
     }

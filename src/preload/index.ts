@@ -88,6 +88,8 @@ const api: BridgeApi = {
         ipcRenderer.invoke(IPC_CHANNELS.localdb.chat.getConversations, userUuid),
       upsertConversations: (userUuid: string, items: ConversationRow[]) =>
         ipcRenderer.invoke(IPC_CHANNELS.localdb.chat.upsertConversations, userUuid, items),
+      replaceConversations: (userUuid: string, items: ConversationRow[]) =>
+        ipcRenderer.invoke(IPC_CHANNELS.localdb.chat.replaceConversations, userUuid, items),
       getMessages: (userUuid: string, convId: string, cursor?: number, limit?: number) =>
         ipcRenderer.invoke(IPC_CHANNELS.localdb.chat.getMessages, userUuid, convId, cursor, limit),
       upsertMessages: (userUuid: string, convId: string, items: MessageRow[]) =>

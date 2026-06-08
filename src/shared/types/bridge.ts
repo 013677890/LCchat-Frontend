@@ -57,6 +57,7 @@ export interface BridgeApi {
     chat: {
       getConversations: (userUuid: string) => Promise<ConversationRow[]>
       upsertConversations: (userUuid: string, items: ConversationRow[]) => Promise<void>
+      replaceConversations: (userUuid: string, items: ConversationRow[]) => Promise<void>
       getMessages: (
         userUuid: string,
         convId: string,
