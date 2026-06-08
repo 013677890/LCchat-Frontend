@@ -16,6 +16,7 @@ import { normalizeErrorMessage } from '../../../shared/utils/error'
 import { resolveRelationErrorMessage } from '../../contact/error-message'
 import { resolveAssetUrl } from '../../../shared/utils/asset-url'
 import { buildQRCodeDataUrl } from '../../../shared/utils/qr-renderer'
+import { openChatConversation } from '../navigation'
 import { toast } from 'vue-sonner'
 import {
   Search,
@@ -272,7 +273,12 @@ async function handleDirectJoinGroup(groupUuid: string, groupName: string) {
     // Smooth navigation into Chat workspace
     setTimeout(async () => {
       try {
-        await sessionStore.startConversation(groupUuid, 2)
+        await openChatConversation({
+          sessionStore,
+          router,
+          targetUuid: groupUuid,
+          convType: 2
+        })
       } catch (err) {
         console.error(err)
       }
@@ -285,7 +291,12 @@ async function handleDirectJoinGroup(groupUuid: string, groupName: string) {
 // Smooth conversation navigation for friends
 async function handleStartP2PChat(peerUuid: string) {
   try {
-    await sessionStore.startConversation(peerUuid, 1)
+    await openChatConversation({
+      sessionStore,
+      router,
+      targetUuid: peerUuid,
+      convType: 1
+    })
   } catch (error) {
     toast.error('无法发起聊天：' + normalizeErrorMessage(error))
   }
