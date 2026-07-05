@@ -47,6 +47,20 @@ export function renderMarkdown(text: string): string {
   })
 
   // 4. Apply markdown formatting to normal text segments
+  // Blockquote: lines starting with "> " (escaped to "&gt; " in step 1).
+  // Consecutive quote lines are merged into a single blockquote.
+  formatted = formatted.replace(
+    /(^|\n)((?:&gt; ?[^\n]*(?:\n|$))+)/g,
+    (_match, leading, quoteBlock: string) => {
+      const inner = quoteBlock
+        .split('\n')
+        .filter((line) => line.trim() !== '')
+        .map((line) => line.replace(/^&gt; ?/, ''))
+        .join('\n')
+      return `${leading}<blockquote>${inner}</blockquote>`
+    }
+  )
+
   // Bold: **text**
   formatted = formatted.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
 

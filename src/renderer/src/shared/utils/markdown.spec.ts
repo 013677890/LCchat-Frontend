@@ -46,4 +46,17 @@ describe('shared/utils/markdown', () => {
     // Double check it did not inject br inside the code tags
     expect(rendered).not.toContain('const x = 5;<br />')
   })
+
+  it('merges consecutive quote lines into a single blockquote', () => {
+    const rendered = renderMarkdown('> first line\n> second line\nafter quote')
+    expect(rendered).toContain('<blockquote>first line<br />second line</blockquote>')
+    expect(rendered).toContain('after quote')
+    // 引用符号本身不应残留在输出里
+    expect(rendered).not.toContain('&gt; first line')
+  })
+
+  it('keeps a lone greater-than sign outside quote syntax escaped', () => {
+    // "a > b" 不是引用语法（> 不在行首），应保持转义文本原样
+    expect(renderMarkdown('a > b')).toBe('a &gt; b')
+  })
 })
