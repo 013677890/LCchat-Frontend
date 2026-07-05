@@ -216,7 +216,7 @@ onMounted(async () => {
       @click-avatar="handleAvatarClick"
     />
     
-    <section class="flex-1 min-w-0 h-full flex flex-col relative">
+    <section class="flex-1 min-w-0 min-h-0 h-full flex flex-col relative overflow-hidden">
       <!-- Floating Glassmorphic Reconnection/Auth Banner -->
       <transition name="slide-down">
         <div 
@@ -243,10 +243,10 @@ onMounted(async () => {
         </div>
       </transition>
 
-      <div class="flex-1 w-full h-full relative">
+      <div class="flex-1 min-h-0 w-full h-full relative overflow-hidden">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
-            <component :is="Component" />
+            <component :is="Component" class="h-full min-h-0" />
           </transition>
         </router-view>
       </div>

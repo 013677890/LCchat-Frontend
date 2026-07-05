@@ -9,6 +9,8 @@ import { useAppStore } from './app.store'
 
 const MAX_CONVERSATION_SYNC_ROUNDS = 20
 const MAX_MESSAGE_PULL_ROUNDS = 20
+const MESSAGE_PAGE_SIZE = 40
+const DRAFT_SAVE_DEBOUNCE_MS = 300
 
 interface PullMessagesData {
   messages?: any[]
@@ -29,6 +31,7 @@ async function pullMessageRows(
     anchorSeq: number
     direction: 1 | 2
     followHasMore: boolean
+    limit?: number
   }
 ): Promise<MessageRow[]> {
   const pulledRows: MessageRow[] = []
@@ -43,7 +46,7 @@ async function pullMessageRows(
       params: {
         convId,
         anchorSeq,
-        limit: 100,
+        limit: options.limit ?? 100,
         direction: options.direction
       }
     })
@@ -69,6 +72,16 @@ async function pullMessageRows(
 
 function getMaxMessageSeq(rows: MessageRow[]): number {
   return rows.reduce((maxSeq, item) => Math.max(maxSeq, item.seq ?? 0), 0)
+}
+
+function getMinPositiveMessageSeq(rows: MessageRow[]): number {
+  return rows.reduce((minSeq, item) => {
+    const seq = item.seq ?? 0
+    if (!Number.isFinite(seq) || seq <= 0) {
+      return minSeq
+    }
+    return Math.min(minSeq, seq)
+  }, Number.POSITIVE_INFINITY)
 }
 
 function resolveAckSeq(previousMaxSeq: number, rows: MessageRow[], receivedSeq?: number): number {
@@ -213,7 +226,9 @@ export const useSessionStore = defineStore('session', () => {
   const activeConvId = ref('')
   const activeDraft = ref('')
   const loading = ref(false)
+  const loadingOlderMessages = ref(false)
   const localDBAvailable = ref(true)
+  const olderHistoryExhaustedByConversation = shallowRef<Record<string, boolean>>({})
   // 对端已读位点（convId → 对方已读到的最大 seq），来源于 MSG_READ_RECEIPT 推送。
   // 仅内存态：离线期间的回执由下次已读推送覆盖，不参与本地持久化。
   const peerReadSeqByConversation = shallowRef<Record<string, number>>({})
@@ -246,14 +261,35 @@ export const useSessionStore = defineStore('session', () => {
     return messagesByConversation.value[activeConvId.value] ?? []
   })
 
+  const activeHasMoreBefore = computed(() => {
+    if (!activeConvId.value) return false
+    return olderHistoryExhaustedByConversation.value[activeConvId.value] !== true
+  })
+
   function dropConversationRuntimeState(convId: string): void {
-    if (!convId || !messagesByConversation.value[convId]) {
+    if (!convId) {
       return
     }
 
-    const nextMessages = { ...messagesByConversation.value }
-    delete nextMessages[convId]
-    messagesByConversation.value = nextMessages
+    if (messagesByConversation.value[convId]) {
+      const nextMessages = { ...messagesByConversation.value }
+      delete nextMessages[convId]
+      messagesByConversation.value = nextMessages
+    }
+
+    if (olderHistoryExhaustedByConversation.value[convId] !== undefined) {
+      const nextExhausted = { ...olderHistoryExhaustedByConversation.value }
+      delete nextExhausted[convId]
+      olderHistoryExhaustedByConversation.value = nextExhausted
+    }
+  }
+
+  function setOlderHistoryExhausted(convId: string, exhausted: boolean): void {
+    if (!convId) return
+    olderHistoryExhaustedByConversation.value = {
+      ...olderHistoryExhaustedByConversation.value,
+      [convId]: exhausted
+    }
   }
 
   async function activateFallbackConversation(removedConvId: string): Promise<void> {
@@ -356,7 +392,7 @@ export const useSessionStore = defineStore('session', () => {
 
     // Load from local SQLite
     let messages = await safeRead(
-      () => window.api.localdb.chat.getMessages(userUuid, convId, undefined, 40),
+      () => window.api.localdb.chat.getMessages(userUuid, convId, undefined, MESSAGE_PAGE_SIZE),
       []
     )
 
@@ -368,7 +404,8 @@ export const useSessionStore = defineStore('session', () => {
       const pulledRows = await pullMessageRows(userUuid, convId, {
         anchorSeq,
         direction: pullDirection,
-        followHasMore: pullDirection === 1
+        followHasMore: pullDirection === 1,
+        limit: 100
       })
       
       if (pulledRows.length > 0) {
@@ -383,6 +420,8 @@ export const useSessionStore = defineStore('session', () => {
       ...messagesByConversation.value,
       [convId]: messages.sort((a, b) => a.sendTime - b.sendTime)
     }
+    const minSeq = getMinPositiveMessageSeq(messages)
+    setOlderHistoryExhausted(convId, messages.length === 0 || minSeq <= 1)
 
     activeDraft.value = await safeRead(() => window.api.localdb.chat.getDraft(userUuid, convId), '')
     
@@ -395,13 +434,98 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function setDraft(draft: string): Promise<void> {
+  let draftSaveTimer: ReturnType<typeof setTimeout> | null = null
+
+  async function persistDraft(userUuid: string, convId: string, draft: string): Promise<void> {
+    await safeWrite(() => window.api.localdb.chat.saveDraft(userUuid, convId, draft))
+  }
+
+  async function setDraft(
+    draft: string,
+    options: { immediate?: boolean } = {}
+  ): Promise<void> {
     activeDraft.value = draft
     if (!currentUserUuid.value || !activeConvId.value) return
 
-    await safeWrite(() =>
-      window.api.localdb.chat.saveDraft(currentUserUuid.value, activeConvId.value, draft)
-    )
+    const userUuid = currentUserUuid.value
+    const convId = activeConvId.value
+
+    if (draftSaveTimer) {
+      clearTimeout(draftSaveTimer)
+      draftSaveTimer = null
+    }
+
+    if (options.immediate) {
+      await persistDraft(userUuid, convId, draft)
+      return
+    }
+
+    draftSaveTimer = setTimeout(() => {
+      draftSaveTimer = null
+      void persistDraft(userUuid, convId, draft)
+    }, DRAFT_SAVE_DEBOUNCE_MS)
+  }
+
+  async function loadOlderMessages(): Promise<void> {
+    const userUuid = currentUserUuid.value
+    const convId = activeConvId.value
+    if (!userUuid || !convId || loadingOlderMessages.value || !activeHasMoreBefore.value) {
+      return
+    }
+
+    const currentMessages = messagesByConversation.value[convId] ?? []
+    if (currentMessages.length === 0) {
+      setOlderHistoryExhausted(convId, true)
+      return
+    }
+
+    loadingOlderMessages.value = true
+    try {
+      const oldestSendTime = currentMessages[0]?.sendTime
+      const localRows =
+        typeof oldestSendTime === 'number'
+          ? await safeRead(
+              () => window.api.localdb.chat.getMessages(userUuid, convId, oldestSendTime, MESSAGE_PAGE_SIZE),
+              []
+            )
+          : []
+
+      let rowsToMerge = localRows
+      const minSeq = getMinPositiveMessageSeq(currentMessages)
+
+      if (rowsToMerge.length < MESSAGE_PAGE_SIZE && Number.isFinite(minSeq) && minSeq > 1) {
+        try {
+          const pulledRows = await pullMessageRows(userUuid, convId, {
+            anchorSeq: minSeq,
+            direction: 2,
+            followHasMore: false,
+            limit: MESSAGE_PAGE_SIZE
+          })
+
+          if (pulledRows.length > 0) {
+            await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, pulledRows))
+            rowsToMerge = upsertMessages(rowsToMerge, pulledRows)
+          }
+        } catch (error) {
+          console.warn('Failed to pull older messages from server, using local cache only', error)
+        }
+      }
+
+      if (rowsToMerge.length > 0) {
+        const merged = upsertMessages(currentMessages, rowsToMerge)
+        messagesByConversation.value = {
+          ...messagesByConversation.value,
+          [convId]: merged
+        }
+
+        const nextMinSeq = getMinPositiveMessageSeq(merged)
+        setOlderHistoryExhausted(convId, !Number.isFinite(nextMinSeq) || nextMinSeq <= 1)
+      } else {
+        setOlderHistoryExhausted(convId, true)
+      }
+    } finally {
+      loadingOlderMessages.value = false
+    }
   }
 
   async function markRead(convId: string, readSeq: number) {
@@ -464,7 +588,7 @@ export const useSessionStore = defineStore('session', () => {
     }
 
     updateConversationPreview(convId, normalizedText, timestamp)
-    await setDraft('')
+    await setDraft('', { immediate: true })
 
     try {
       const response = await httpClient.post('/api/v1/auth/messages/send', {
@@ -983,12 +1107,18 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   async function clearState(): Promise<void> {
+    if (draftSaveTimer) {
+      clearTimeout(draftSaveTimer)
+      draftSaveTimer = null
+    }
     currentUserUuid.value = ''
     conversations.value = []
     messagesByConversation.value = {}
+    olderHistoryExhaustedByConversation.value = {}
     activeConvId.value = ''
     activeDraft.value = ''
     loading.value = false
+    loadingOlderMessages.value = false
     localDBAvailable.value = true
     peerReadSeqByConversation.value = {}
   }
@@ -1044,10 +1174,13 @@ export const useSessionStore = defineStore('session', () => {
     activeConversation,
     activeMessages,
     loading,
+    loadingOlderMessages,
+    activeHasMoreBefore,
     localDBAvailable,
     peerReadSeqByConversation,
     bootstrap,
     openConversation,
+    loadOlderMessages,
     setDraft,
     sendMessage,
     resendMessage,

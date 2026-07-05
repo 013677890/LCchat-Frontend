@@ -32,6 +32,8 @@ const {
   activeMessages,
   activeDraft,
   loading,
+  loadingOlderMessages,
+  activeHasMoreBefore,
   localDBAvailable
 } = storeToRefs(sessionStore)
 
@@ -226,6 +228,10 @@ async function handleDraftChange(value: string) {
 
 async function handleSend(text: string) {
   await sessionStore.sendMessage(text)
+}
+
+async function handleLoadOlderMessages() {
+  await sessionStore.loadOlderMessages()
 }
 
 // Group Details Drawer Actions
@@ -594,9 +600,9 @@ async function handleTransferOwnerSelectedMember() {
 </script>
 
 <template>
-  <div class="flex h-full w-full overflow-hidden bg-gradient-to-tr from-[rgba(0,198,112,0.02)] to-[rgba(65,90,130,0.02)]">
+  <div class="flex h-full min-h-0 w-full overflow-hidden bg-gradient-to-tr from-[rgba(0,198,112,0.02)] to-[rgba(65,90,130,0.02)]">
     <!-- List Pane -->
-    <aside class="w-[320px] min-w-[320px] flex flex-col bg-[var(--c-bg-panel)] h-full border-r border-white/10 backdrop-blur-xl">
+    <aside class="w-[300px] min-w-[280px] xl:w-[320px] xl:min-w-[320px] flex flex-col bg-[var(--c-bg-panel)] h-full min-h-0 border-r border-white/10 backdrop-blur-xl">
       <ConversationPane
         :items="conversationItems"
         :active-conv-id="activeConvId"
@@ -610,7 +616,7 @@ async function handleTransferOwnerSelectedMember() {
     </aside>
 
     <!-- Detail Pane -->
-    <main class="flex-1 flex flex-col min-w-0 h-full relative">
+    <main class="flex-1 flex flex-col min-w-0 min-h-0 h-full relative overflow-hidden">
       <MessagePane
         v-if="activeConvId"
         :title="activeConversationTitle"
@@ -626,8 +632,11 @@ async function handleTransferOwnerSelectedMember() {
         :peer-avatar="peerAvatarUrl"
         :self-avatar="selfAvatarUrl"
         :peer-online="peerOnline"
+        :loading-older="loadingOlderMessages"
+        :has-more-before="activeHasMoreBefore"
         @update:draft="handleDraftChange"
         @send="handleSend"
+        @load-older-messages="handleLoadOlderMessages"
         @recall-message="handleRecallMessage"
         @resend-message="handleResendMessage"
       >
@@ -662,7 +671,7 @@ async function handleTransferOwnerSelectedMember() {
     <transition name="slide-drawer">
       <aside 
         v-if="showDrawer && activeConvId" 
-        class="w-[300px] min-w-[300px] border-l border-white/20 bg-white/95 backdrop-blur-2xl shadow-2xl h-full overflow-y-auto flex flex-col transition-all duration-300 ease-out"
+        class="w-[280px] min-w-[280px] xl:w-[300px] xl:min-w-[300px] border-l border-white/20 bg-white/95 backdrop-blur-2xl shadow-2xl h-full min-h-0 overflow-hidden flex flex-col transition-all duration-300 ease-out"
       >
         <!-- Header -->
         <header class="p-6 border-b border-neutral-100 flex items-center justify-between">
@@ -671,7 +680,7 @@ async function handleTransferOwnerSelectedMember() {
         </header>
 
         <!-- Body -->
-        <div class="flex-1 p-6 space-y-6 overflow-y-auto">
+        <div class="flex-1 min-h-0 p-6 space-y-6 overflow-y-auto">
           <!-- 1. GROUP CHAT DETAILS -->
           <div v-if="isGroup && activeGroup" class="space-y-6">
             <div class="flex flex-col items-center text-center space-y-3">

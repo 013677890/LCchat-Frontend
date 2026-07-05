@@ -366,7 +366,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <main class="flex-1 flex flex-col bg-[var(--c-bg-panel-soft)] overflow-hidden">
+  <main class="flex-1 h-full min-h-0 overflow-hidden flex flex-col bg-[var(--c-bg-panel-soft)]">
     <!-- Header -->
     <header class="w-full px-8 py-5 border-b border-[var(--c-border)] bg-[var(--c-bg-panel)] backdrop-blur-xl flex justify-between items-center z-10">
       <div class="flex items-center gap-3">
@@ -381,7 +381,7 @@ onMounted(() => {
     </header>
 
     <!-- Unified Workspace with 2 columns: Search Main (8cols) and My QR Sidebar (4cols) -->
-    <div class="flex-1 overflow-y-auto">
+    <div class="flex-1 min-h-0 overflow-y-auto">
       <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 p-8 max-w-7xl mx-auto w-full">
         
         <!-- Left Main Column -->
@@ -708,13 +708,13 @@ onMounted(() => {
             <p class="text-xs text-[var(--c-text-sub)] leading-normal">向其他用户提供您的二维码链接或 Token，即可轻松被发现并建立联系。</p>
             
             <!-- Business Card Layout -->
-            <div class="bg-gradient-to-b from-gray-50 to-white dark:from-zinc-900 dark:to-zinc-950 border border-[var(--c-border)] rounded-2xl p-5 flex flex-col items-center shadow-inner relative overflow-hidden group">
+            <div class="bg-gradient-to-b from-white to-[var(--c-bg-panel)] border border-[var(--c-border)] rounded-2xl p-5 flex flex-col items-center shadow-inner relative overflow-hidden group">
               <!-- Grid background deco -->
-              <div class="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] pointer-events-none" />
+              <div class="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] pointer-events-none opacity-30" />
               
               <!-- Personal Info Profile Header -->
-              <div class="flex items-center gap-3.5 w-full mb-4 z-10 border-b border-gray-100 dark:border-zinc-800 pb-3">
-                <div class="w-10 h-10 rounded-xl bg-gray-200 border border-[var(--c-border)] overflow-hidden">
+              <div class="flex items-center gap-3.5 w-full mb-4 z-10 border-b border-[var(--c-border)] pb-3">
+                <div class="w-10 h-10 rounded-xl bg-[var(--c-bg-panel-soft)] border border-[var(--c-border)] overflow-hidden">
                   <img v-if="profile?.payload?.avatar" :src="resolveAssetUrl(profile.payload.avatar as string)" alt="my-avatar" class="w-full h-full object-cover" />
                   <div
                     v-else
@@ -735,7 +735,7 @@ onMounted(() => {
               </div>
 
               <!-- QR Code Preview box -->
-              <div class="w-48 h-48 bg-white rounded-xl border border-gray-200/60 p-2 shadow-md relative overflow-hidden flex items-center justify-center z-10 group-hover:scale-[1.02] transition-transform duration-300">
+              <div class="w-48 h-48 bg-white rounded-xl border border-[var(--c-border)] p-2 shadow-md relative overflow-hidden flex items-center justify-center z-10 group-hover:scale-[1.02] transition-transform duration-300">
                 <img v-if="qrImageUrl" :src="qrImageUrl" alt="my-qr" class="w-full h-full object-contain" />
                 <div v-else class="text-center p-4">
                   <RefreshCw class="w-6 h-6 text-gray-300 animate-spin mx-auto mb-2" />

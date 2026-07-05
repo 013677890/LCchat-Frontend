@@ -25,18 +25,40 @@ const props = defineProps<{
   selfAvatar?: string
   /** 单聊对端在线状态：true 在线 / false 离线 / null 未知（不展示） */
   peerOnline?: boolean | null
+  /** 正在拉取更早历史消息 */
+  loadingOlder?: boolean
+  /** 当前会话是否可能还有更早历史 */
+  hasMoreBefore?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:draft': [string]
   send: [string]
+  loadOlderMessages: []
   recallMessage: [msgId: string]
   resendMessage: [clientMsgId: string]
 }>()
 
+const MAX_DRAFT_LENGTH = 20000
+const MAX_TEXT_FILE_BYTES = 256 * 1024
+let draftLimitWarned = false
+
+function normalizeDraft(value: string): string {
+  if (value.length <= MAX_DRAFT_LENGTH) {
+    draftLimitWarned = false
+    return value
+  }
+
+  if (!draftLimitWarned) {
+    toast.warning(`草稿已达到 ${MAX_DRAFT_LENGTH} 字上限，请拆分后发送。`)
+    draftLimitWarned = true
+  }
+  return value.slice(0, MAX_DRAFT_LENGTH)
+}
+
 const draftProxy = computed({
   get: () => props.draft,
-  set: (value: string) => emit('update:draft', value)
+  set: (value: string) => emit('update:draft', normalizeDraft(value))
 })
 
 // ------ Auto Scroll ------
@@ -45,6 +67,8 @@ const historyRef = ref<HTMLElement | null>(null)
 const showScrollFab = ref(false)
 // 用户翻历史期间新到达的消息数（点击 FAB 或滚回底部后清零）
 const pendingNewCount = ref(0)
+const restoringOlderLoad = ref(false)
+const olderLoadScrollHeight = ref(0)
 
 function isNearBottom(): boolean {
   const el = historyRef.value
@@ -68,11 +92,22 @@ function handleHistoryScroll(): void {
   if (distance < 120) {
     pendingNewCount.value = 0
   }
+  if (el.scrollTop <= 80 && props.hasMoreBefore && !props.loadingOlder) {
+    requestOlderMessages()
+  }
 }
 
 function jumpToLatest(): void {
   pendingNewCount.value = 0
   void scrollToBottom()
+}
+
+function requestOlderMessages(): void {
+  const el = historyRef.value
+  if (!el || props.loadingOlder || !props.hasMoreBefore) return
+  restoringOlderLoad.value = true
+  olderLoadScrollHeight.value = el.scrollHeight
+  emit('loadOlderMessages')
 }
 
 // 切换会话：无条件回到底部（最新消息），并重置新消息角标。
@@ -92,6 +127,17 @@ watch(
   () => props.messages,
   (nextMessages, prevMessages) => {
     if (nextMessages === prevMessages) return
+    if (restoringOlderLoad.value) {
+      void nextTick(() => {
+        const el = historyRef.value
+        if (el) {
+          el.scrollTop += el.scrollHeight - olderLoadScrollHeight.value
+        }
+        restoringOlderLoad.value = false
+        olderLoadScrollHeight.value = 0
+      })
+      return
+    }
     const lastMessage = nextMessages[nextMessages.length - 1]
     const lastIsSelf = lastMessage?.payload?.from === 'self'
     if (lastIsSelf || isNearBottom()) {
@@ -99,6 +145,18 @@ watch(
       void scrollToBottom()
     } else if (prevMessages && nextMessages.length > prevMessages.length) {
       pendingNewCount.value += nextMessages.length - prevMessages.length
+    }
+  }
+)
+
+watch(
+  () => props.loadingOlder,
+  (loading) => {
+    if (!loading && restoringOlderLoad.value) {
+      void nextTick(() => {
+        restoringOlderLoad.value = false
+        olderLoadScrollHeight.value = 0
+      })
     }
   }
 )
@@ -185,9 +243,9 @@ function getMessageAvatarInitial(message: MessageRow): string {
   return avatarInitial(getSenderName(message))
 }
 
-// 消息聚簇：同一发送者在 3 分钟内的连续消息只保留首条的头像和昵称，
-// 后续消息用等宽占位对齐，减少视觉噪音（Telegram/Slack 风格）。
-const CLUSTER_WINDOW_MS = 3 * 60 * 1000
+// 消息聚簇：同一发送者在 1 分钟内的连续消息只保留首条的头像和昵称，
+// 后续消息用等宽占位对齐，减少视觉噪音（优化后：缩短窗口避免过度聚簇）。
+const CLUSTER_WINDOW_MS = 1 * 60 * 1000
 
 function isClusterStart(index: number): boolean {
   if (shouldShowDivider(index)) return true
@@ -367,12 +425,19 @@ function processFiles(files: FileList) {
                    /\.(txt|md|json|js|ts|jsx|tsx|html|css|py|go|rs|c|cpp|h|sh|yml|yaml|xml)$/i.test(file.name)
                    
     if (isText) {
+      if (file.size > MAX_TEXT_FILE_BYTES) {
+        toast.warning(`“${file.name}” 超过 ${formatBytes(MAX_TEXT_FILE_BYTES)}，请拆分后再导入。`)
+        continue
+      }
+
       const reader = new FileReader()
       reader.onload = (e) => {
         const content = e.target?.result
         if (typeof content === 'string') {
           const header = `\n--- 文件: ${file.name} ---\n`
-          draftProxy.value = (draftProxy.value ? draftProxy.value + '\n' : '') + header + content + '\n'
+          draftProxy.value = normalizeDraft(
+            (draftProxy.value ? draftProxy.value + '\n' : '') + header + content + '\n'
+          )
           toast.success(`成功导入文本文件: ${file.name}`)
         }
       }
@@ -385,7 +450,9 @@ function processFiles(files: FileList) {
       toast.info(`“${file.name}” 是媒体/二进制文件。当前版本仅支持文本消息发送，已为您提取该文件的基本信息。`, {
         duration: 5000
       })
-      draftProxy.value = (draftProxy.value ? draftProxy.value + ' ' : '') + `[文件: ${file.name} (${formatBytes(file.size)})]`
+      draftProxy.value = normalizeDraft(
+        (draftProxy.value ? draftProxy.value + ' ' : '') + `[文件: ${file.name} (${formatBytes(file.size)})]`
+      )
     }
   }
 }
@@ -721,6 +788,18 @@ watch(draftProxy, () => {
 
     <div class="history-wrap">
       <main ref="historyRef" class="history" @scroll.passive="handleHistoryScroll">
+      <div v-if="props.messages.length > 0" class="history-load-row">
+        <span v-if="props.loadingOlder" class="history-load-pill">正在加载更早消息...</span>
+        <button
+          v-else-if="props.hasMoreBefore"
+          type="button"
+          class="history-load-button"
+          @click="requestOlderMessages"
+        >
+          查看更早消息
+        </button>
+        <span v-else class="history-load-pill history-load-pill--muted">没有更早的消息了</span>
+      </div>
       <div v-if="props.messages.length === 0" class="empty-state">
         <span
           class="empty-avatar"
@@ -998,14 +1077,18 @@ watch(draftProxy, () => {
 <style scoped>
 .message-pane {
   flex: 1;
+  height: 100%;
+  min-height: 0;
   min-width: 0;
   background: var(--c-bg-app);
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow: hidden;
 }
 
 .header {
+  flex: 0 0 auto;
   min-height: 64px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.04);
   display: flex;
@@ -1091,18 +1174,56 @@ watch(draftProxy, () => {
 }
 
 .history-wrap {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
   position: relative;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .history {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 24px;
   padding-bottom: 40px;
+}
+
+.history-load-row {
+  display: flex;
+  justify-content: center;
+  min-height: 30px;
+  margin-bottom: 10px;
+}
+
+.history-load-button,
+.history-load-pill {
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.78);
+  color: var(--c-text-sub);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.history-load-button {
+  cursor: pointer;
+}
+
+.history-load-button:hover {
+  color: var(--c-primary-active);
+  border-color: rgba(0, 198, 112, 0.22);
+  background: #fff;
+}
+
+.history-load-pill--muted {
+  color: var(--c-text-muted);
+  background: rgba(0, 0, 0, 0.03);
+  box-shadow: none;
 }
 
 /* 悬浮“回到底部/新消息”按钮 */
@@ -1216,6 +1337,7 @@ watch(draftProxy, () => {
   flex-direction: column;
   gap: 4px;
   max-width: min(75%, 600px);
+  min-width: 0;
 }
 
 .bubble-row--self .bubble-container {
@@ -1226,6 +1348,8 @@ watch(draftProxy, () => {
   display: flex;
   align-items: center;
   gap: 8px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .bubble-row--self .bubble-wrapper {
@@ -1288,6 +1412,8 @@ watch(draftProxy, () => {
 }
 
 .bubble {
+  max-width: 100%;
+  min-width: 0;
   border-radius: 16px 16px 16px 0; /* Asymmetric bottom-left tail for peer */
   padding: 11px 15px;
   background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
@@ -1295,6 +1421,7 @@ watch(draftProxy, () => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.015);
   position: relative;
   transition: all var(--duration-fast) var(--ease-out);
+  overflow-wrap: anywhere;
 }
 
 .bubble:hover {
@@ -1402,6 +1529,7 @@ watch(draftProxy, () => {
 }
 
 .composer {
+  flex: 0 0 auto;
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: var(--blur-md);
   -webkit-backdrop-filter: var(--blur-md);
@@ -1606,10 +1734,13 @@ watch(draftProxy, () => {
 /* Markdown Content Styling */
 .bubble p.message-content-html {
   white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* Multiline Code Block */
 :deep(.code-block) {
+  max-width: 100%;
   background: rgba(30, 33, 38, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-md);

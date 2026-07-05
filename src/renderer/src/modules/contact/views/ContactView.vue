@@ -1298,12 +1298,12 @@ async function handleRemoveFromBlacklist() {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
+  gap: 10px;
+  padding: 11px 12px;
   border-radius: var(--radius-md);
   border: 1px solid transparent;
   background: transparent;
-  color: var(--c-text-sub);
+  color: rgba(255, 255, 255, 0.7);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -1313,8 +1313,8 @@ async function handleRemoveFromBlacklist() {
 }
 
 .cat-item:hover {
-  background: rgba(255, 255, 255, 0.04);
-  color: #fff;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.95);
   transform: translateX(2px);
 }
 
@@ -1326,6 +1326,8 @@ async function handleRemoveFromBlacklist() {
 
 .cat-icon {
   flex-shrink: 0;
+  width: 18px;
+  height: 18px;
   transition: color var(--duration-fast);
 }
 
@@ -1363,6 +1365,16 @@ async function handleRemoveFromBlacklist() {
   flex-direction: column;
   backdrop-filter: var(--blur-lg);
   -webkit-backdrop-filter: var(--blur-lg);
+  overflow: hidden;
+}
+
+/* 3. Canvas Detail Panel (Right) */
+.canvas-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+  overflow: hidden;
 }
 
 .list-header {
@@ -1654,9 +1666,50 @@ async function handleRemoveFromBlacklist() {
 
 .empty-splash p {
   font-size: 12px;
-  margin: 0;
+  margin: 0 0 20px;
   z-index: 1;
   max-width: 240px;
+}
+
+.empty-actions {
+  display: flex;
+  gap: 12px;
+  z-index: 1;
+}
+
+.action-btn {
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 10px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.action-btn--primary {
+  background: linear-gradient(135deg, #00e583 0%, #00b164 100%);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(0, 198, 112, 0.3);
+}
+
+.action-btn--primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 198, 112, 0.4);
+}
+
+.action-btn--ghost {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.action-btn--ghost:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
 }
 
 .animate-spin-slow {
@@ -1673,6 +1726,7 @@ async function handleRemoveFromBlacklist() {
   flex: 1;
   overflow-y: auto;
   padding: 32px 24px;
+  background: transparent;
 }
 
 .profile-card {
@@ -2127,5 +2181,179 @@ async function handleRemoveFromBlacklist() {
 }
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+/* Light workspace pass: the page uses the global light shell, so the old dark-panel
+   tokens need to resolve back to readable surfaces and text colors. */
+.contact-layout {
+  min-height: 0;
+}
+
+.category-panel,
+.list-panel,
+.canvas-panel {
+  min-height: 0;
+}
+
+.category-panel {
+  background: rgba(255, 255, 255, 0.72);
+  border-right: 1px solid var(--c-border);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.65);
+}
+
+.brand-header h2,
+.normal-header h3,
+.profile-names h2,
+.value-text {
+  color: var(--c-text-main);
+}
+
+.cat-item {
+  color: var(--c-text-sub);
+}
+
+.cat-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--c-text-main);
+}
+
+.cat-item--active {
+  background: var(--c-primary-soft);
+  border-color: rgba(0, 198, 112, 0.24);
+  color: var(--c-primary-active) !important;
+}
+
+.cat-count,
+.tag-pill,
+.presence-tag {
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--c-text-sub);
+}
+
+.list-panel {
+  background: rgba(255, 255, 255, 0.58);
+  border-right: 1px solid var(--c-border);
+}
+
+.list-header,
+.profile-hero {
+  border-color: var(--c-border);
+}
+
+.apply-tabs {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: var(--c-border);
+}
+
+.apply-tab {
+  color: var(--c-text-sub);
+}
+
+.apply-tab--active {
+  background: #fff;
+  color: var(--c-text-main);
+  box-shadow: var(--shadow-sm);
+}
+
+.search-input,
+.glass-input,
+.glass-textarea {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: var(--c-border);
+  color: var(--c-text-main);
+}
+
+.search-input:focus,
+.glass-input:focus,
+.glass-textarea:focus {
+  background: #fff;
+  border-color: rgba(0, 198, 112, 0.35);
+}
+
+.list-body,
+.canvas-inner {
+  min-height: 0;
+}
+
+.list-card:hover {
+  background: rgba(0, 0, 0, 0.035);
+}
+
+.list-card--active {
+  background: var(--c-primary-soft) !important;
+  border-color: rgba(0, 198, 112, 0.24);
+}
+
+.card-title,
+.signature-text,
+.reason-block,
+.notice-block {
+  color: var(--c-text-main);
+}
+
+.card-avatar,
+.profile-avatar,
+.profile-avatar-placeholder {
+  border-color: var(--c-border);
+}
+
+.card-desc,
+.original-nick,
+.empty-splash p {
+  color: var(--c-text-sub);
+}
+
+.canvas-panel {
+  background: rgba(244, 247, 249, 0.72);
+}
+
+.empty-splash h4 {
+  color: var(--c-text-main);
+}
+
+.splash-icon {
+  color: rgba(28, 30, 35, 0.18);
+}
+
+.profile-card {
+  background: rgba(255, 255, 255, 0.86);
+  border-color: var(--c-border);
+  box-shadow: var(--shadow-lg);
+}
+
+.uuid-row,
+.reason-block,
+.notice-block,
+.approval-form {
+  background: rgba(0, 0, 0, 0.035);
+  border-color: var(--c-border);
+}
+
+.uuid-code {
+  color: var(--c-text-main);
+}
+
+.btn-icon:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--c-text-main);
+}
+
+.btn-cancel,
+.tag-suggestion-pill {
+  background: rgba(0, 0, 0, 0.035);
+  border-color: var(--c-border);
+  color: var(--c-text-sub);
+}
+
+.profile-actions {
+  border-top-color: var(--c-border);
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(144, 156, 170, 0.38);
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(144, 156, 170, 0.68);
 }
 </style>

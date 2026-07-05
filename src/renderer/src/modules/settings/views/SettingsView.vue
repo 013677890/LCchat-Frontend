@@ -93,11 +93,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <main class="flex-1 flex flex-col bg-[var(--c-bg-panel-soft)]">
+  <main class="flex-1 h-full min-h-0 overflow-hidden flex flex-col bg-[var(--c-bg-panel-soft)]">
     <header class="px-8 py-6 border-b border-[var(--c-border)] bg-[var(--c-bg-panel)] sticky top-0 z-10 backdrop-blur-xl">
       <h2 class="text-xl font-bold text-[var(--c-text-main)] drop-shadow-sm">个人设置与安全</h2>
     </header>
-    <div class="flex-1 p-8 overflow-y-auto">
+    <div class="flex-1 min-h-0 p-8 overflow-y-auto">
       <div class="max-w-4xl mx-auto">
         <SettingsActionsPanel
           :has-selected-blacklist="false"

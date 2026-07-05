@@ -248,12 +248,15 @@ function triggerDelete() {
 .conversations {
   width: 100%;
   height: 100%;
+  min-height: 0;
   background: transparent;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .header {
+  flex: 0 0 auto;
   min-height: 64px;
   display: flex;
   align-items: center;
@@ -287,6 +290,8 @@ function triggerDelete() {
 }
 
 .list {
+  flex: 1 1 auto;
+  min-height: 0;
   list-style: none;
   margin: 0;
   padding: 8px 12px;
@@ -566,6 +571,7 @@ function triggerDelete() {
 
 /* Sidebar Search Box Styles */
 .search-box {
+  flex: 0 0 auto;
   padding: 8px 12px;
   background: var(--c-bg-panel);
   border-bottom: 1px solid var(--c-border);
