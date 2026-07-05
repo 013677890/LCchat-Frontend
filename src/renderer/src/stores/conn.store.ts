@@ -7,6 +7,7 @@ import { useFriendStore } from './friend.store'
 import { useApplyStore } from './apply.store'
 import { useGroupStore } from './group.store'
 import { useAppStore } from './app.store'
+import { refreshSessionToken } from '../shared/http/session-refresh'
 import {
   decodeMessageEnvelope,
   encodeMessageEnvelope,
@@ -17,6 +18,9 @@ import {
   decodeErrorFrame
 } from '../shared/utils/pb-codec'
 
+// 连续握手失败达到该阈值后先刷新 token 再重连；刷新失败则判定登录态失效。
+const MAX_HANDSHAKE_FAILURES_BEFORE_REFRESH = 2
+
 export const useConnStore = defineStore('conn', () => {
   const status = ref<'idle' | 'connecting' | 'connected' | 'reconnecting' | 'auth_failed'>('idle')
   const lastActiveTime = ref(Date.now())
@@ -26,6 +30,8 @@ export const useConnStore = defineStore('conn', () => {
   let heartbeatTimeoutTimer: any = null
   let reconnectTimer: any = null
   let reconnectDelay = 1000
+  // 记录连续"未成功建立即关闭"的次数，用于识别握手层失败（如 token 失效被拒 401）。
+  let consecutiveHandshakeFailures = 0
 
   const authStore = useAuthStore()
 
@@ -72,14 +78,17 @@ export const useConnStore = defineStore('conn', () => {
     try {
       ws = new WebSocket(url)
       ws.binaryType = 'arraybuffer'
+      let opened = false
 
       ws.onopen = () => {
         console.log('[WS] Connection established')
+        opened = true
+        consecutiveHandshakeFailures = 0
         status.value = 'connected'
         lastActiveTime.value = Date.now()
         reconnectDelay = 1000
         startHeartbeat()
-        
+
         // When connected/reconnected, perform a sync pull for safety
         const userUuid = authStore.userUuid
         if (userUuid) {
@@ -100,7 +109,7 @@ export const useConnStore = defineStore('conn', () => {
           const buf = new Uint8Array(event.data)
           const envelope = decodeMessageEnvelope(buf)
           lastActiveTime.value = Date.now()
-          
+
           await handleEnvelope(envelope)
         } catch (err) {
           console.error('[WS] Failed to decode or handle message envelope', err)
@@ -110,13 +119,18 @@ export const useConnStore = defineStore('conn', () => {
       ws.onclose = (event) => {
         console.warn('[WS] Connection closed:', event.code, event.reason)
         cleanup()
-        
+
         // If JWT expired, set auth_failed
         if (event.code === 4001 || event.code === 20002) {
           status.value = 'auth_failed'
           return
         }
-        
+
+        // 从未 open 就关闭，通常是握手被拒（token 失效 401 → 浏览器只给 1006）。
+        if (!opened) {
+          consecutiveHandshakeFailures += 1
+        }
+
         if (status.value !== 'idle') {
           status.value = 'reconnecting'
           scheduleReconnect()
@@ -187,10 +201,45 @@ export const useConnStore = defineStore('conn', () => {
   function scheduleReconnect() {
     cleanup()
     console.log(`[WS] Scheduling reconnect in ${reconnectDelay}ms`)
-    reconnectTimer = setTimeout(() => {
+    reconnectTimer = setTimeout(async () => {
       reconnectDelay = Math.min(reconnectDelay * 2, 30000)
+      await refreshTokenIfNeeded()
+      if (status.value === 'auth_failed' || status.value === 'idle') {
+        return
+      }
       connect()
     }, reconnectDelay)
+  }
+
+  // 重连前检查登录态：token 已过期或连续握手失败时先走刷新。
+  // connect 服务握手会校验 Redis 中的 token 哈希，拿旧 token 重连只会持续 401。
+  // 刷新失败（refresh token 失效/设备被踢）则停止重连并标记 auth_failed，
+  // 由 UI 引导用户重新登录，避免无限重连循环。
+  async function refreshTokenIfNeeded(): Promise<void> {
+    const session = authStore.session
+    if (!session) {
+      status.value = 'auth_failed'
+      return
+    }
+
+    const tokenExpired = session.expiresAt > 0 && session.expiresAt <= Date.now()
+    const handshakeKeepsFailing =
+      consecutiveHandshakeFailures >= MAX_HANDSHAKE_FAILURES_BEFORE_REFRESH
+    if (!tokenExpired && !handshakeKeepsFailing) {
+      return
+    }
+
+    try {
+      const nextSession = await refreshSessionToken()
+      if (!nextSession?.accessToken) {
+        status.value = 'auth_failed'
+        return
+      }
+      consecutiveHandshakeFailures = 0
+    } catch (err) {
+      console.warn('[WS] Refresh token before reconnect failed', err)
+      status.value = 'auth_failed'
+    }
   }
 
   async function handleEnvelope(envelope: any) {
@@ -233,6 +282,14 @@ export const useConnStore = defineStore('conn', () => {
         const markReadNotice = decodeMarkReadNotice(envelope.data)
         console.log('[WS] Received MSG_MARK_READ:', markReadNotice)
         await sessionStore.handleIncomingMarkRead(userUuid, markReadNotice)
+        break
+      }
+
+      case 'MSG_READ_RECEIPT': {
+        // P2P 对端已读回执：payload 与 MarkReadNotice 同构（convId + readSeq）。
+        const readReceipt = decodeMarkReadNotice(envelope.data)
+        console.log('[WS] Received MSG_READ_RECEIPT:', readReceipt)
+        sessionStore.handleIncomingReadReceipt(readReceipt)
         break
       }
 

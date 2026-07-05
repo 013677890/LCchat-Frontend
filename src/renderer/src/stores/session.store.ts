@@ -214,6 +214,9 @@ export const useSessionStore = defineStore('session', () => {
   const activeDraft = ref('')
   const loading = ref(false)
   const localDBAvailable = ref(true)
+  // 对端已读位点（convId → 对方已读到的最大 seq），来源于 MSG_READ_RECEIPT 推送。
+  // 仅内存态：离线期间的回执由下次已读推送覆盖，不参与本地持久化。
+  const peerReadSeqByConversation = shallowRef<Record<string, number>>({})
 
   async function safeRead<T>(runner: () => Promise<T>, fallback: T): Promise<T> {
     try {
@@ -899,6 +902,25 @@ export const useSessionStore = defineStore('session', () => {
     })
   }
 
+  // 对端已读回执（MSG_READ_RECEIPT）：单调推进 convId 的对端已读位点。
+  function handleIncomingReadReceipt(notice: { convId: string; readSeq: number }): void {
+    const convId = notice.convId
+    const readSeq = Number(notice.readSeq) || 0
+    if (!convId || readSeq <= 0) {
+      return
+    }
+
+    const current = peerReadSeqByConversation.value[convId] ?? 0
+    if (readSeq <= current) {
+      return
+    }
+
+    peerReadSeqByConversation.value = {
+      ...peerReadSeqByConversation.value,
+      [convId]: readSeq
+    }
+  }
+
   function updateConversationPreview(convId: string, previewText: string, timestamp: number) {
     conversations.value = conversations.value.map(c => {
       if (c.convId === convId) {
@@ -968,6 +990,7 @@ export const useSessionStore = defineStore('session', () => {
     activeDraft.value = ''
     loading.value = false
     localDBAvailable.value = true
+    peerReadSeqByConversation.value = {}
   }
 
   async function startConversation(targetUuid: string, convType: number): Promise<string> {
@@ -1022,6 +1045,7 @@ export const useSessionStore = defineStore('session', () => {
     activeMessages,
     loading,
     localDBAvailable,
+    peerReadSeqByConversation,
     bootstrap,
     openConversation,
     setDraft,
@@ -1038,6 +1062,7 @@ export const useSessionStore = defineStore('session', () => {
     handleIncomingMessage,
     handleIncomingRecall,
     handleIncomingMarkRead,
+    handleIncomingReadReceipt,
     syncConversationsFromServer,
     startConversation,
     playNotificationSound

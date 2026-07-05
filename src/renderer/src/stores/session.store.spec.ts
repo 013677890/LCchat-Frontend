@@ -426,4 +426,27 @@ describe('session.store message pull', () => {
     expect(store.activeDraft).toBe('next draft')
     expect(store.activeMessages).toEqual([])
   })
+
+  it('advances the peer read seq monotonically and ignores invalid receipts', async () => {
+    const store = useSessionStore()
+
+    store.handleIncomingReadReceipt({ convId: 'conv-1', readSeq: 5 })
+    expect(store.peerReadSeqByConversation['conv-1']).toBe(5)
+
+    // 乱序/重复回执不允许回退已读位点
+    store.handleIncomingReadReceipt({ convId: 'conv-1', readSeq: 3 })
+    expect(store.peerReadSeqByConversation['conv-1']).toBe(5)
+
+    store.handleIncomingReadReceipt({ convId: 'conv-1', readSeq: 9 })
+    expect(store.peerReadSeqByConversation['conv-1']).toBe(9)
+
+    // 缺 convId 或非法 seq 的回执直接忽略
+    store.handleIncomingReadReceipt({ convId: '', readSeq: 10 })
+    store.handleIncomingReadReceipt({ convId: 'conv-2', readSeq: 0 })
+    expect(store.peerReadSeqByConversation['conv-2']).toBeUndefined()
+
+    // 退出登录清空所有已读位点
+    await store.clearState()
+    expect(store.peerReadSeqByConversation).toEqual({})
+  })
 })
