@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { Bell, BellOff, Pin, PinOff, Trash2, Search, X } from 'lucide-vue-next'
+import { Bell, BellOff, Pin, PinOff, Trash2, Search, X, Users } from 'lucide-vue-next'
 import SkeletonLoader from '../../../shared/components/SkeletonLoader.vue'
+import { avatarInitial, avatarPaletteFromId } from '../../../shared/utils/avatar'
 
 interface ConversationListItem {
   convId: string
@@ -11,6 +12,10 @@ interface ConversationListItem {
   timeText: string
   mute: boolean
   pin: boolean
+  /** 头像 URL，空则回退首字色块 */
+  avatar?: string
+  /** 群聊标识：展示群角标 */
+  isGroup?: boolean
 }
 
 const props = defineProps<{
@@ -39,6 +44,17 @@ const filteredItems = computed(() => {
 
 function handleSelect(convId: string): void {
   emit('select', convId)
+}
+
+// 未读数封顶展示：超过 99 显示 99+，避免撑破徽标。
+function formatUnread(unread: number): string {
+  return unread > 99 ? '99+' : String(unread)
+}
+
+// 无头像图时的首字色块：按 convId 稳定着色
+function avatarStyle(item: ConversationListItem): Record<string, string> {
+  const palette = avatarPaletteFromId(item.convId)
+  return { background: palette.bg, color: palette.fg }
 }
 
 // Right-click Context Menu State
@@ -146,7 +162,7 @@ function triggerDelete() {
         <li v-for="item in filteredItems" :key="item.convId">
           <button
             class="item"
-            :class="{ 
+            :class="{
               'item--active': props.activeConvId === item.convId,
               'item--pinned': item.pin
             }"
@@ -154,20 +170,33 @@ function triggerDelete() {
             @click="handleSelect(item.convId)"
             @contextmenu="openContextMenu($event, item)"
           >
-            <div class="item-head">
-              <div class="title-wrap">
-                <Pin v-if="item.pin" :size="12" class="pin-icon" />
-                <strong>{{ item.title }}</strong>
-              </div>
-              <span>{{ item.timeText }}</span>
+            <!-- 头像列 -->
+            <div class="item-avatar-wrap">
+              <img v-if="item.avatar" :src="item.avatar" class="item-avatar" alt="" />
+              <span v-else class="item-avatar item-avatar--initial" :style="avatarStyle(item)">
+                {{ avatarInitial(item.title) }}
+              </span>
+              <span v-if="item.isGroup" class="group-badge" title="群聊">
+                <Users :size="9" />
+              </span>
             </div>
-            <div class="item-body">
-              <p>{{ item.preview || '暂无消息' }}</p>
-              <div class="status-wrap">
-                <BellOff v-if="item.mute" :size="12" class="mute-icon" />
-                <small v-if="item.unread > 0" :class="{ 'unread--muted': item.mute }">
-                  {{ item.unread }}
-                </small>
+
+            <div class="item-main">
+              <div class="item-head">
+                <div class="title-wrap">
+                  <Pin v-if="item.pin" :size="12" class="pin-icon" />
+                  <strong>{{ item.title }}</strong>
+                </div>
+                <span>{{ item.timeText }}</span>
+              </div>
+              <div class="item-body">
+                <p>{{ item.preview || '暂无消息' }}</p>
+                <div class="status-wrap">
+                  <BellOff v-if="item.mute" :size="12" class="mute-icon" />
+                  <small v-if="item.unread > 0" :class="{ 'unread--muted': item.mute }">
+                    {{ formatUnread(item.unread) }}
+                  </small>
+                </div>
               </div>
             </div>
           </button>
@@ -274,12 +303,60 @@ function triggerDelete() {
   background: transparent;
   text-align: left;
   cursor: pointer;
-  padding: 12px;
+  padding: 10px 12px;
   min-height: 72px;
   transition: all var(--duration-fast) var(--ease-out);
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+/* 会话头像列 */
+.item-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.item-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  object-fit: cover;
+  display: block;
+  box-shadow: var(--shadow-sm);
+  user-select: none;
+}
+
+.item-avatar--initial {
+  display: flex;
+  align-items: center;
   justify-content: center;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.group-badge {
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-full);
+  background: var(--c-primary);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff;
+}
+
+.item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .item:hover {
@@ -311,7 +388,7 @@ function triggerDelete() {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 0;
   gap: 8px;
 }
 

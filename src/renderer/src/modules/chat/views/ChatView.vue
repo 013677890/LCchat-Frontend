@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { toast } from 'vue-sonner'
 import ConversationPane from '../components/ConversationPane.vue'
@@ -8,15 +8,22 @@ import { useSessionStore } from '../../../stores/session.store'
 import { useGroupStore } from '../../../stores/group.store'
 import { useFriendStore } from '../../../stores/friend.store'
 import { useAuthStore } from '../../../stores/auth.store'
+import { useUserStore } from '../../../stores/user.store'
 import { useBlacklistStore } from '../../../stores/blacklist.store'
+import { usePresenceStore } from '../../../stores/presence.store'
 import { checkBlacklist } from '../../blacklist/api'
+import { formatConversationTime } from '../../../shared/utils/time'
+import { resolveAssetUrl } from '../../../shared/utils/asset-url'
+import { appConfirm } from '../../../shared/composables/useConfirm'
 import type { GroupMemberItemDTO } from '../../group/api'
 
 const sessionStore = useSessionStore()
 const groupStore = useGroupStore()
 const friendStore = useFriendStore()
 const authStore = useAuthStore()
+const userStore = useUserStore()
 const blacklistStore = useBlacklistStore()
+const presenceStore = usePresenceStore()
 
 const {
   conversations,
@@ -79,6 +86,105 @@ const currentUserGroupRole = computed(() => {
 
 const canManageGroup = computed(() => {
   return currentUserGroupRole.value >= 1
+})
+
+// 对端已读位点（仅单聊）：来自 MSG_READ_RECEIPT 推送，供 MessagePane 展示已读/未读。
+const peerReadSeq = computed(() => {
+  if (!activeConvId.value) return 0
+  return sessionStore.peerReadSeqByConversation[activeConvId.value] ?? 0
+})
+
+// ------ 会话列表项组装（含头像与群标识） ------
+const conversationItems = computed(() => {
+  const friendAvatarByUuid = new Map<string, string>()
+  for (const friend of friendStore.friends) {
+    friendAvatarByUuid.set(friend.peerUuid, (friend.payload.avatar as string) || '')
+  }
+  const groupAvatarByUuid = new Map<string, string>()
+  for (const group of groupStore.groups) {
+    groupAvatarByUuid.set(group.groupUuid, group.avatar ? resolveAssetUrl(group.avatar) : '')
+  }
+
+  return conversations.value.map(c => {
+    const isGroupConv = Number(c.payload.convType) === 2
+    const targetUuid = String(c.payload.targetUuid || '')
+    return {
+      convId: c.convId,
+      title: sessionStore.getConversationTitle(c),
+      preview: sessionStore.getConversationPreview(c),
+      unread: sessionStore.getConversationUnread(c),
+      timeText: c.updatedAt ? formatConversationTime(c.updatedAt) : '',
+      mute: !!c.payload.mute,
+      pin: !!c.payload.pin,
+      avatar: isGroupConv
+        ? groupAvatarByUuid.get(targetUuid) || ''
+        : friendAvatarByUuid.get(targetUuid) || '',
+      isGroup: isGroupConv
+    }
+  })
+})
+
+// ------ 聊天区头像 ------
+const selfAvatarUrl = computed(() =>
+  resolveAssetUrl(userStore.profile?.payload?.avatar as string, { fallbackType: 'me' })
+)
+
+// 单聊对端头像（好友表里已归一化过），空则由 MessagePane 回退首字色块。
+const peerAvatarUrl = computed(() => {
+  if (isGroup.value || !activeConversation.value) return ''
+  const targetUuid = activeConversation.value.payload.targetUuid as string
+  const friend = friendStore.friends.find(f => f.peerUuid === targetUuid)
+  return (friend?.payload.avatar as string) || ''
+})
+
+// 聊天头部头像：群聊用群头像，单聊用对端头像。
+const conversationAvatarUrl = computed(() => {
+  if (!activeConversation.value) return ''
+  if (isGroup.value) {
+    return activeGroup.value?.avatar ? resolveAssetUrl(activeGroup.value.avatar) : ''
+  }
+  return peerAvatarUrl.value
+})
+
+// ------ 单聊对端在线状态 ------
+const PEER_PRESENCE_REFRESH_MS = 60000
+let presenceTimer: ReturnType<typeof setInterval> | null = null
+
+const activePeerUuid = computed(() => {
+  if (isGroup.value || !activeConversation.value) return ''
+  return (activeConversation.value.payload.targetUuid as string) || ''
+})
+
+const peerOnline = computed<boolean | null>(() => {
+  if (!activePeerUuid.value) return null
+  const status = presenceStore.getStatus(activePeerUuid.value)
+  return status ? status.isOnline : null
+})
+
+// 切换到单聊会话时立即拉一次在线状态，之后周期刷新当前会话对端。
+watch(
+  activePeerUuid,
+  (uuid) => {
+    if (uuid) {
+      void presenceStore.syncSingle(uuid)
+    }
+  },
+  { immediate: true }
+)
+
+onMounted(() => {
+  presenceTimer = setInterval(() => {
+    if (activePeerUuid.value) {
+      void presenceStore.syncSingle(activePeerUuid.value)
+    }
+  }, PEER_PRESENCE_REFRESH_MS)
+})
+
+onUnmounted(() => {
+  if (presenceTimer) {
+    clearInterval(presenceTimer)
+    presenceTimer = null
+  }
 })
 
 // Watch active conversation changes
@@ -225,29 +331,46 @@ async function submitKick() {
 
 // Group settings actions
 async function handleLeaveGroup() {
-  if (!activeGroup.value) return
-  if (confirm('确认退出该群组吗？')) {
-    const guid = activeGroup.value.groupUuid
-    await groupStore.quitGroup(guid)
-    await sessionStore.deleteConv(activeConvId.value)
-  }
+  const group = activeGroup.value
+  if (!group) return
+  const convId = activeConvId.value
+  const confirmed = await appConfirm({
+    title: '退出群组',
+    message: `确认退出「${group.name}」吗？退出后需要重新申请才能加入。`,
+    confirmText: '退出群组',
+    danger: true
+  })
+  if (!confirmed) return
+  await groupStore.quitGroup(group.groupUuid)
+  await sessionStore.deleteConv(convId)
 }
 
 async function handleDismissGroup() {
-  if (!activeGroup.value) return
-  if (confirm('确认解散该群组吗？此操作无法撤销。')) {
-    const guid = activeGroup.value.groupUuid
-    await groupStore.dissolveGroup(guid)
-    await sessionStore.deleteConv(activeConvId.value)
-  }
+  const group = activeGroup.value
+  if (!group) return
+  const convId = activeConvId.value
+  const confirmed = await appConfirm({
+    title: '解散群组',
+    message: `确认解散「${group.name}」吗？所有成员将被移出，此操作无法撤销。`,
+    confirmText: '解散',
+    danger: true
+  })
+  if (!confirmed) return
+  await groupStore.dissolveGroup(group.groupUuid)
+  await sessionStore.deleteConv(convId)
 }
 
 // Transfer owner
 async function handleTransferOwner(targetUuid: string) {
-  if (!activeGroup.value) return
-  if (confirm('确认将群主转让给该成员吗？')) {
-    await groupStore.transferOwner(activeGroup.value.groupUuid, targetUuid)
-  }
+  const group = activeGroup.value
+  if (!group) return
+  const confirmed = await appConfirm({
+    title: '转让群主',
+    message: '确认将群主转让给该成员吗？转让后你将变为普通成员。',
+    confirmText: '转让'
+  })
+  if (!confirmed) return
+  await groupStore.transferOwner(group.groupUuid, targetUuid)
 }
 
 // Friend Settings Actions
@@ -280,11 +403,18 @@ async function toggleBlacklist() {
 }
 
 async function handleDeleteFriend() {
-  if (!currentFriend.value) return
-  if (confirm('确认删除该好友吗？将同时清除双方会话。')) {
-    await friendStore.removeFriend(authStore.userUuid, currentFriend.value.peerUuid)
-    await sessionStore.deleteConv(activeConvId.value)
-  }
+  const friend = currentFriend.value
+  if (!friend) return
+  const convId = activeConvId.value
+  const confirmed = await appConfirm({
+    title: '删除好友',
+    message: '确认删除该好友吗？将同时清除双方会话，此操作不可撤销。',
+    confirmText: '删除',
+    danger: true
+  })
+  if (!confirmed) return
+  await friendStore.removeFriend(authStore.userUuid, friend.peerUuid)
+  await sessionStore.deleteConv(convId)
 }
 
 async function handlePin(convId: string, pin: boolean) {
@@ -296,9 +426,14 @@ async function handleMute(convId: string, mute: boolean) {
 }
 
 async function handleDelete(convId: string) {
-  if (confirm('确认删除该会话吗？删除后将无法恢复此会话。')) {
-    await sessionStore.deleteConv(convId)
-  }
+  const confirmed = await appConfirm({
+    title: '删除会话',
+    message: '确认删除该会话吗？删除后将无法恢复。',
+    confirmText: '删除',
+    danger: true
+  })
+  if (!confirmed) return
+  await sessionStore.deleteConv(convId)
 }
 
 async function handleRecallMessage(msgId: string) {
@@ -416,30 +551,44 @@ async function handleToggleAdminRole() {
 }
 
 async function handleKickSelectedMember() {
-  if (!activeGroup.value || !selectedMember.value) return
-  if (confirm(`确认将成员 "${selectedMember.value.groupNickname || selectedMember.value.nickname}" 移出群组吗？`)) {
-    try {
-      await groupStore.kickMember(activeGroup.value.groupUuid, selectedMember.value.userUuid)
-      showMemberDetailModal.value = false
-      selectedMember.value = null
-      toast.success('成员已成功踢出')
-    } catch (err: any) {
-      toast.error('踢出群成员失败: ' + (err.message || '未知错误'))
-    }
+  const group = activeGroup.value
+  const member = selectedMember.value
+  if (!group || !member) return
+  const confirmed = await appConfirm({
+    title: '移出群组',
+    message: `确认将成员「${member.groupNickname || member.nickname}」移出群组吗？`,
+    confirmText: '移出',
+    danger: true
+  })
+  if (!confirmed) return
+  try {
+    await groupStore.kickMember(group.groupUuid, member.userUuid)
+    showMemberDetailModal.value = false
+    selectedMember.value = null
+    toast.success('成员已成功踢出')
+  } catch (err: any) {
+    toast.error('踢出群成员失败: ' + (err.message || '未知错误'))
   }
 }
 
 async function handleTransferOwnerSelectedMember() {
-  if (!activeGroup.value || !selectedMember.value) return
-  if (confirm(`确认将群主转让给 "${selectedMember.value.groupNickname || selectedMember.value.nickname}" 吗？此操作无法撤销。`)) {
-    try {
-      await groupStore.transferOwner(activeGroup.value.groupUuid, selectedMember.value.userUuid)
-      showMemberDetailModal.value = false
-      selectedMember.value = null
-      toast.success('群主身份已成功转让')
-    } catch (err: any) {
-      toast.error('转让群主失败: ' + (err.message || '未知错误'))
-    }
+  const group = activeGroup.value
+  const member = selectedMember.value
+  if (!group || !member) return
+  const confirmed = await appConfirm({
+    title: '转让群主',
+    message: `确认将群主转让给「${member.groupNickname || member.nickname}」吗？此操作无法撤销。`,
+    confirmText: '转让',
+    danger: true
+  })
+  if (!confirmed) return
+  try {
+    await groupStore.transferOwner(group.groupUuid, member.userUuid)
+    showMemberDetailModal.value = false
+    selectedMember.value = null
+    toast.success('群主身份已成功转让')
+  } catch (err: any) {
+    toast.error('转让群主失败: ' + (err.message || '未知错误'))
   }
 }
 </script>
@@ -449,15 +598,7 @@ async function handleTransferOwnerSelectedMember() {
     <!-- List Pane -->
     <aside class="w-[320px] min-w-[320px] flex flex-col bg-[var(--c-bg-panel)] h-full border-r border-white/10 backdrop-blur-xl">
       <ConversationPane
-        :items="conversations.map(c => ({
-          convId: c.convId,
-          title: sessionStore.getConversationTitle(c),
-          preview: sessionStore.getConversationPreview(c),
-          unread: sessionStore.getConversationUnread(c),
-          timeText: c.updatedAt ? new Date(c.updatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '',
-          mute: !!c.payload.mute,
-          pin: !!c.payload.pin
-        }))"
+        :items="conversationItems"
         :active-conv-id="activeConvId"
         :loading="loading"
         :local-db-available="localDBAvailable"
@@ -479,6 +620,12 @@ async function handleTransferOwnerSelectedMember() {
         :is-group="isGroup"
         :current-user-group-role="currentUserGroupRole"
         :group-members="activeMembers"
+        :conv-id="activeConvId"
+        :peer-read-seq="peerReadSeq"
+        :conversation-avatar="conversationAvatarUrl"
+        :peer-avatar="peerAvatarUrl"
+        :self-avatar="selfAvatarUrl"
+        :peer-online="peerOnline"
         @update:draft="handleDraftChange"
         @send="handleSend"
         @recall-message="handleRecallMessage"
@@ -497,9 +644,17 @@ async function handleTransferOwnerSelectedMember() {
           </button>
         </template>
       </MessagePane>
-      <div v-else class="flex-1 flex flex-col items-center justify-center text-[var(--c-text-muted)] gap-4 bg-[var(--c-bg-panel-soft)] backdrop-blur-sm">
-        <div class="w-20 h-20 rounded-3xl bg-neutral-100 flex items-center justify-center text-4xl shadow-sm text-neutral-400">💬</div>
-        <p class="font-medium text-lg text-neutral-500">选择一个会话开启沟通</p>
+      <div v-else class="flex-1 flex flex-col items-center justify-center gap-3 bg-[var(--c-bg-panel-soft)] backdrop-blur-sm select-none">
+        <div class="relative">
+          <div class="w-24 h-24 rounded-[28px] bg-gradient-to-br from-[rgba(0,198,112,0.14)] to-[rgba(0,198,112,0.04)] flex items-center justify-center text-5xl shadow-sm">
+            💬
+          </div>
+          <div class="absolute -right-2 -bottom-1 w-9 h-9 rounded-2xl bg-white shadow-md flex items-center justify-center text-lg rotate-6">
+            ✨
+          </div>
+        </div>
+        <p class="font-semibold text-lg text-neutral-600 mt-3">选择一个会话开始沟通</p>
+        <p class="text-xs text-neutral-400">左侧选择会话，或到「通讯录」「发现」找到好友与群组</p>
       </div>
     </main>
 

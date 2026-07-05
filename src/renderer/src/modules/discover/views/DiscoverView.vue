@@ -16,6 +16,7 @@ import { normalizeErrorMessage } from '../../../shared/utils/error'
 import { resolveRelationErrorMessage } from '../../contact/error-message'
 import { resolveAssetUrl } from '../../../shared/utils/asset-url'
 import { buildQRCodeDataUrl } from '../../../shared/utils/qr-renderer'
+import { avatarInitial, avatarPaletteFromId } from '../../../shared/utils/avatar'
 import { openChatConversation } from '../navigation'
 import { toast } from 'vue-sonner'
 import {
@@ -136,6 +137,12 @@ function mapUserResult(item: any) {
     avatar: resolveAssetUrl(item.avatar),
     signature: item.signature || '暂无个性签名'
   }
+}
+
+// 无头像图时的首字色块：按 UUID 稳定着色，与聊天/通讯录保持一致
+function avatarBlockStyle(id: string): Record<string, string> {
+  const palette = avatarPaletteFromId(id)
+  return { background: palette.bg, color: palette.fg }
 }
 
 // Watch Query string
@@ -493,8 +500,12 @@ onMounted(() => {
                     <!-- Avatar with Pulse state -->
                     <div class="w-12 h-12 rounded-2xl bg-gray-100 border border-[var(--c-border)] overflow-hidden relative flex-shrink-0">
                       <img v-if="user.avatar" :src="user.avatar" alt="avatar" class="w-full h-full object-cover" />
-                      <div v-else class="w-full h-full bg-gradient-to-tr from-emerald-400 to-teal-500 grid place-items-center text-white font-bold text-lg">
-                        {{ (user.nickname || user.uuid).slice(0, 1).toUpperCase() }}
+                      <div
+                        v-else
+                        class="w-full h-full grid place-items-center font-bold text-lg"
+                        :style="avatarBlockStyle(user.uuid)"
+                      >
+                        {{ avatarInitial(user.nickname || user.uuid) }}
                       </div>
                       
                       <!-- Real-time Presence sync dot -->
@@ -555,8 +566,12 @@ onMounted(() => {
                     <!-- Elegant characters fallback avatar -->
                     <div class="w-12 h-12 rounded-2xl bg-gray-100 border border-[var(--c-border)] overflow-hidden flex-shrink-0">
                       <img v-if="group.avatar" :src="resolveAssetUrl(group.avatar)" alt="group-avatar" class="w-full h-full object-cover" />
-                      <div v-else class="w-full h-full bg-gradient-to-tr from-mint-green to-emerald-500 grid place-items-center text-white font-bold text-lg">
-                        {{ group.name.slice(0, 1).toUpperCase() }}
+                      <div
+                        v-else
+                        class="w-full h-full grid place-items-center font-bold text-lg"
+                        :style="avatarBlockStyle(group.groupUuid)"
+                      >
+                        {{ avatarInitial(group.name) }}
                       </div>
                     </div>
 
@@ -614,8 +629,12 @@ onMounted(() => {
                 <div class="max-w-md w-full p-6 bg-white/90 dark:bg-zinc-900/70 border border-[var(--c-border)] rounded-[32px] shadow-lg flex flex-col items-center text-center gap-5">
                   <div class="w-20 h-20 rounded-[28px] border border-[var(--c-border)] overflow-hidden bg-gray-50 shadow-md relative">
                     <img v-if="parsedUser.avatar" :src="parsedUser.avatar" alt="avatar" class="w-full h-full object-cover" />
-                    <div v-else class="w-full h-full bg-gradient-to-tr from-emerald-400 to-teal-500 grid place-items-center text-white text-2xl font-bold">
-                      {{ (parsedUser.nickname || parsedUser.uuid).slice(0, 1).toUpperCase() }}
+                    <div
+                      v-else
+                      class="w-full h-full grid place-items-center text-2xl font-bold"
+                      :style="avatarBlockStyle(parsedUser.uuid)"
+                    >
+                      {{ avatarInitial(parsedUser.nickname || parsedUser.uuid) }}
                     </div>
                     
                     <span 
@@ -697,7 +716,13 @@ onMounted(() => {
               <div class="flex items-center gap-3.5 w-full mb-4 z-10 border-b border-gray-100 dark:border-zinc-800 pb-3">
                 <div class="w-10 h-10 rounded-xl bg-gray-200 border border-[var(--c-border)] overflow-hidden">
                   <img v-if="profile?.payload?.avatar" :src="resolveAssetUrl(profile.payload.avatar as string)" alt="my-avatar" class="w-full h-full object-cover" />
-                  <div v-else class="w-full h-full bg-emerald-500 grid place-items-center text-white text-base font-bold">U</div>
+                  <div
+                    v-else
+                    class="w-full h-full grid place-items-center text-base font-bold"
+                    :style="avatarBlockStyle(authStore.userUuid)"
+                  >
+                    {{ avatarInitial(String(profile?.payload?.nickname || '我')) }}
+                  </div>
                 </div>
                 <div class="min-w-0">
                   <strong class="text-xs font-bold text-[var(--c-text-main)] truncate block">

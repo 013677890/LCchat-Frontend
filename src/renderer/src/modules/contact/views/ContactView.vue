@@ -14,13 +14,11 @@ import {
   Trash2,
   Edit3,
   ShieldCheck,
-  Mail,
-  Calendar,
+  Compass,
   VolumeX,
   Volume2,
   CheckCircle,
   XCircle,
-  Clock,
   ExternalLink
 } from 'lucide-vue-next'
 import { useFriendStore } from '../../../stores/friend.store'
@@ -34,6 +32,8 @@ import { useAppStore } from '../../../stores/app.store'
 import { toast } from 'vue-sonner'
 import SkeletonLoader from '../../../shared/components/SkeletonLoader.vue'
 import { normalizeErrorMessage } from '../../../shared/utils/error'
+import { avatarInitial, avatarPaletteFromId } from '../../../shared/utils/avatar'
+import { appConfirm, appPrompt } from '../../../shared/composables/useConfirm'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -133,6 +133,12 @@ function copyToClipboard(text: string) {
     isCopied.value = false
     copiedId.value = ''
   }, 2000)
+}
+
+// 无头像图时的首字色块：按 UUID 稳定着色，与聊天/会话列表保持一致
+function avatarBlockStyle(id: string): Record<string, string> {
+  const palette = avatarPaletteFromId(id)
+  return { background: palette.bg, color: palette.fg }
 }
 
 // Active computed selections
@@ -242,17 +248,25 @@ async function startEditTag() {
 }
 
 async function handleDeleteFriend() {
-  if (!selectedFriendId.value || !authStore.userUuid) return
-  if (confirm('确定要删除该好友吗？此操作不可撤销。')) {
-    const peerUuid = selectedFriendId.value
-    try {
-      await friendStore.removeFriend(authStore.userUuid, peerUuid)
-      await sessionStore.deleteConv(buildP2PConversationId(authStore.userUuid, peerUuid))
-      selectedFriendId.value = ''
-      toast.success('好友已成功删除')
-    } catch (error) {
-      toast.error('删除好友失败，请重试')
-    }
+  const peerUuid = selectedFriendId.value
+  if (!peerUuid || !authStore.userUuid) return
+  const friendName = String(
+    selectedFriend.value?.payload.remark || selectedFriend.value?.payload.nickname || peerUuid
+  )
+  const confirmed = await appConfirm({
+    title: '删除好友',
+    message: `确定要删除好友「${friendName}」吗？双方会话将一并清除，此操作不可撤销。`,
+    confirmText: '删除',
+    danger: true
+  })
+  if (!confirmed) return
+  try {
+    await friendStore.removeFriend(authStore.userUuid, peerUuid)
+    await sessionStore.deleteConv(buildP2PConversationId(authStore.userUuid, peerUuid))
+    selectedFriendId.value = ''
+    toast.success('好友已成功删除')
+  } catch (error) {
+    toast.error('删除好友失败，请重试')
   }
 }
 
@@ -293,11 +307,17 @@ async function handleApplyRequest(action: 1 | 2) {
 
 // Resend Apply
 async function handleResendApply() {
-  if (!selectedApplyId.value || !authStore.userUuid) return
+  const applyId = selectedApplyId.value
+  if (!applyId || !authStore.userUuid) return
+  const reason = await appPrompt({
+    title: '重新发送申请',
+    message: '可以补充一句附言，让对方更容易通过你的申请。',
+    placeholder: '附言理由（可选）',
+    confirmText: '发送'
+  })
+  if (reason === null) return
   try {
-    const reason = prompt('请输入重新发送的附言理由 (可选):')
-    if (reason === null) return
-    await applyStore.retrySentApply(authStore.userUuid, selectedApplyId.value, reason)
+    await applyStore.retrySentApply(authStore.userUuid, applyId, reason)
     toast.success('好友申请已重新发送成功！')
   } catch (error) {
     toast.error('重新发送申请失败，请重试')
@@ -362,27 +382,31 @@ async function saveMyGroupNickname() {
 }
 
 async function handleGroupQuitOrDissolve() {
-  if (!selectedGroup.value) return
-  const isOwner = selectedGroup.value.ownerUuid === authStore.userUuid
-  const msg = isOwner ? '确定要解散该群聊吗？所有群消息将被清空。' : '确定要退出该群聊吗？'
-  
-  if (confirm(msg)) {
-    try {
-      if (isOwner) {
-        const groupUuid = selectedGroup.value.groupUuid
-        await groupStore.dissolveGroup(groupUuid)
-        await sessionStore.deleteConv(groupUuid)
-        toast.success('群聊已成功解散')
-      } else {
-        const groupUuid = selectedGroup.value.groupUuid
-        await groupStore.quitGroup(groupUuid)
-        await sessionStore.deleteConv(groupUuid)
-        toast.success('已成功退出该群聊')
-      }
-      selectedGroupId.value = ''
-    } catch (e) {
-      toast.error('操作失败，请重试')
+  const group = selectedGroup.value
+  if (!group) return
+  const isOwner = group.ownerUuid === authStore.userUuid
+  const confirmed = await appConfirm({
+    title: isOwner ? '解散群聊' : '退出群聊',
+    message: isOwner
+      ? `确定要解散「${group.name}」吗？所有群消息将被清空，此操作无法撤销。`
+      : `确定要退出「${group.name}」吗？退出后需要重新申请才能加入。`,
+    confirmText: isOwner ? '解散' : '退出',
+    danger: true
+  })
+  if (!confirmed) return
+  try {
+    if (isOwner) {
+      await groupStore.dissolveGroup(group.groupUuid)
+      await sessionStore.deleteConv(group.groupUuid)
+      toast.success('群聊已成功解散')
+    } else {
+      await groupStore.quitGroup(group.groupUuid)
+      await sessionStore.deleteConv(group.groupUuid)
+      toast.success('已成功退出该群聊')
     }
+    selectedGroupId.value = ''
+  } catch (e) {
+    toast.error('操作失败，请重试')
   }
 }
 
@@ -413,15 +437,20 @@ async function handleGroupReviewRequest(applyId: string | number, action: number
 
 // Blacklist Action
 async function handleRemoveFromBlacklist() {
-  if (!selectedBlacklistId.value) return
-  if (confirm('确定要将该用户移出黑名单吗？')) {
-    try {
-      await blacklistStore.removeFromBlacklist(authStore.userUuid, selectedBlacklistId.value)
-      selectedBlacklistId.value = ''
-      toast.success('用户已成功移出黑名单')
-    } catch (error) {
-      toast.error('操作失败，请重试')
-    }
+  const peerUuid = selectedBlacklistId.value
+  if (!peerUuid) return
+  const confirmed = await appConfirm({
+    title: '移出黑名单',
+    message: '确定要将该用户移出黑名单吗？移出后对方可以重新向你发送消息。',
+    confirmText: '移出'
+  })
+  if (!confirmed) return
+  try {
+    await blacklistStore.removeFromBlacklist(authStore.userUuid, peerUuid)
+    selectedBlacklistId.value = ''
+    toast.success('用户已成功移出黑名单')
+  } catch (error) {
+    toast.error('操作失败，请重试')
   }
 }
 
@@ -542,8 +571,12 @@ async function handleRemoveFromBlacklist() {
                 class="card-avatar"
                 alt="Avatar"
               />
-              <div v-else class="card-avatar-placeholder">
-                {{ String(friend.payload.remark || friend.payload.nickname || 'F').slice(0,1).toUpperCase() }}
+              <div
+                v-else
+                class="card-avatar-placeholder"
+                :style="avatarBlockStyle(friend.peerUuid)"
+              >
+                {{ avatarInitial(String(friend.payload.remark || friend.payload.nickname || '友')) }}
               </div>
               <span
                 class="presence-dot"
@@ -577,8 +610,12 @@ async function handleRemoveFromBlacklist() {
                 class="card-avatar"
                 alt="Avatar"
               />
-              <div v-else class="card-avatar-placeholder bg-emerald-500/10 text-emerald-500">
-                A
+              <div
+                v-else
+                class="card-avatar-placeholder"
+                :style="avatarBlockStyle(String(apply.payload.applicantUuid || apply.payload.targetUuid || apply.applyId))"
+              >
+                {{ avatarInitial(String(apply.payload.applicantNickname || apply.payload.targetNickname || '申')) }}
               </div>
             </div>
             <div class="card-meta">
@@ -619,8 +656,12 @@ async function handleRemoveFromBlacklist() {
                 class="card-avatar"
                 alt="Group Avatar"
               />
-              <div v-else class="card-avatar-placeholder bg-teal-500/10 text-teal-400">
-                GP
+              <div
+                v-else
+                class="card-avatar-placeholder"
+                :style="avatarBlockStyle(group.groupUuid)"
+              >
+                {{ avatarInitial(group.name) }}
               </div>
             </div>
             <div class="card-meta">
@@ -650,8 +691,12 @@ async function handleRemoveFromBlacklist() {
                 class="card-avatar"
                 alt="Avatar"
               />
-              <div v-else class="card-avatar-placeholder bg-rose-500/10 text-rose-500">
-                B
+              <div
+                v-else
+                class="card-avatar-placeholder card-avatar-placeholder--banned"
+                :style="avatarBlockStyle(blackItem.peerUuid)"
+              >
+                {{ avatarInitial(String(blackItem.payload.nickname || '黑')) }}
               </div>
             </div>
             <div class="card-meta">
@@ -696,8 +741,12 @@ async function handleRemoveFromBlacklist() {
                 class="profile-avatar"
                 alt="Avatar"
               />
-              <div v-else class="profile-avatar-placeholder">
-                {{ String(selectedFriend.payload.remark || selectedFriend.payload.nickname || 'U').slice(0,1).toUpperCase() }}
+              <div
+                v-else
+                class="profile-avatar-placeholder"
+                :style="avatarBlockStyle(selectedFriend.peerUuid)"
+              >
+                {{ avatarInitial(String(selectedFriend.payload.remark || selectedFriend.payload.nickname || '友')) }}
               </div>
               <span
                 class="status-ring"
@@ -827,8 +876,12 @@ async function handleRemoveFromBlacklist() {
                 class="profile-avatar"
                 alt="Group Avatar"
               />
-              <div v-else class="profile-avatar-placeholder text-teal-400">
-                {{ selectedGroup.name.slice(0,2).toUpperCase() }}
+              <div
+                v-else
+                class="profile-avatar-placeholder"
+                :style="avatarBlockStyle(selectedGroup.groupUuid)"
+              >
+                {{ avatarInitial(selectedGroup.name) }}
               </div>
             </div>
             
@@ -966,8 +1019,12 @@ async function handleRemoveFromBlacklist() {
                 class="profile-avatar"
                 alt="Avatar"
               />
-              <div v-else class="profile-avatar-placeholder">
-                A
+              <div
+                v-else
+                class="profile-avatar-placeholder"
+                :style="avatarBlockStyle(String(selectedApply.payload.applicantUuid || selectedApply.payload.targetUuid || selectedApply.applyId))"
+              >
+                {{ avatarInitial(String(selectedApply.payload.applicantNickname || selectedApply.payload.targetNickname || '申')) }}
               </div>
             </div>
             
@@ -1064,8 +1121,12 @@ async function handleRemoveFromBlacklist() {
                 class="profile-avatar"
                 alt="Avatar"
               />
-              <div class="profile-avatar-placeholder text-rose-500">
-                B
+              <div
+                v-else
+                class="profile-avatar-placeholder"
+                :style="avatarBlockStyle(selectedBlacklistedUser.peerUuid)"
+              >
+                {{ avatarInitial(String(selectedBlacklistedUser.payload.nickname || '黑')) }}
               </div>
             </div>
             
@@ -1134,8 +1195,11 @@ async function handleRemoveFromBlacklist() {
           >
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-xl bg-white/10 text-white flex items-center justify-center font-bold text-sm">
-                  {{ req.nickname.substring(0, 1) }}
+                <div
+                  class="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm"
+                  :style="avatarBlockStyle(req.applicantUuid)"
+                >
+                  {{ avatarInitial(req.nickname) }}
                 </div>
                 <div class="text-left">
                   <h5 class="text-white font-bold text-sm">{{ req.nickname }}</h5>
@@ -1441,6 +1505,11 @@ async function handleRemoveFromBlacklist() {
   font-size: 15px;
   background: var(--c-primary-soft);
   color: var(--c-primary);
+}
+
+/* 黑名单头像做去饱和处理，视觉上与正常关系区分 */
+.card-avatar-placeholder--banned {
+  filter: grayscale(0.7) brightness(0.85);
 }
 
 .presence-dot {

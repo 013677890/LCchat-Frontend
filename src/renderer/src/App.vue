@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { Toaster } from 'vue-sonner'
+import ConfirmDialogHost from './shared/components/ConfirmDialogHost.vue'
 </script>
 
 <template>
@@ -9,6 +10,7 @@ import { Toaster } from 'vue-sonner'
     </Transition>
   </RouterView>
   <Toaster position="bottom-right" expand richColors />
+  <ConfirmDialogHost />
 </template>
 
 <style scoped>

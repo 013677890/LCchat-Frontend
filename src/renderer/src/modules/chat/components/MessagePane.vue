@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch, onMounted, onUnmounted } from 'vue'
+import { computed, nextTick, ref, watch, onMounted, onUnmounted } from 'vue'
 import type { MessageRow } from '../../../shared/types/localdb'
-import { Copy, CornerUpLeft, MessageSquare, AlertCircle } from 'lucide-vue-next'
+import { Copy, CornerUpLeft, AlertCircle, Search, X, ChevronDown } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 import { renderMarkdown } from '../../../shared/utils/markdown'
+import { avatarInitial, avatarPaletteFromId } from '../../../shared/utils/avatar'
+import { resolveAssetUrl } from '../../../shared/utils/asset-url'
 
 const props = defineProps<{
   title: string
@@ -13,6 +15,16 @@ const props = defineProps<{
   isGroup: boolean
   currentUserGroupRole: number // 0=normal, 1=admin, 2=owner
   groupMembers?: any[]
+  peerReadSeq?: number
+  convId?: string
+  /** 头部展示头像（单聊=对端头像，群聊=群头像），空则用首字色块 */
+  conversationAvatar?: string
+  /** 单聊对端头像，用于对端消息气泡旁 */
+  peerAvatar?: string
+  /** 当前登录用户头像，用于自己消息气泡旁 */
+  selfAvatar?: string
+  /** 单聊对端在线状态：true 在线 / false 离线 / null 未知（不展示） */
+  peerOnline?: boolean | null
 }>()
 
 const emit = defineEmits<{
@@ -26,6 +38,90 @@ const draftProxy = computed({
   get: () => props.draft,
   set: (value: string) => emit('update:draft', value)
 })
+
+// ------ Auto Scroll ------
+const historyRef = ref<HTMLElement | null>(null)
+// 距底部超过该距离时露出“回到底部”悬浮按钮
+const showScrollFab = ref(false)
+// 用户翻历史期间新到达的消息数（点击 FAB 或滚回底部后清零）
+const pendingNewCount = ref(0)
+
+function isNearBottom(): boolean {
+  const el = historyRef.value
+  if (!el) return true
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 120
+}
+
+async function scrollToBottom(): Promise<void> {
+  await nextTick()
+  const el = historyRef.value
+  if (el) {
+    el.scrollTop = el.scrollHeight
+  }
+}
+
+function handleHistoryScroll(): void {
+  const el = historyRef.value
+  if (!el) return
+  const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+  showScrollFab.value = distance > 300
+  if (distance < 120) {
+    pendingNewCount.value = 0
+  }
+}
+
+function jumpToLatest(): void {
+  pendingNewCount.value = 0
+  void scrollToBottom()
+}
+
+// 切换会话：无条件回到底部（最新消息），并重置新消息角标。
+watch(
+  () => props.convId,
+  () => {
+    pendingNewCount.value = 0
+    showScrollFab.value = false
+    void scrollToBottom()
+  },
+  { immediate: true }
+)
+
+// 消息更新：贴近底部或最后一条是自己发的才跟随滚动，避免打断用户翻历史；
+// 不跟随时累计新消息数，由悬浮按钮提示。
+watch(
+  () => props.messages,
+  (nextMessages, prevMessages) => {
+    if (nextMessages === prevMessages) return
+    const lastMessage = nextMessages[nextMessages.length - 1]
+    const lastIsSelf = lastMessage?.payload?.from === 'self'
+    if (lastIsSelf || isNearBottom()) {
+      pendingNewCount.value = 0
+      void scrollToBottom()
+    } else if (prevMessages && nextMessages.length > prevMessages.length) {
+      pendingNewCount.value += nextMessages.length - prevMessages.length
+    }
+  }
+)
+
+// ------ P2P 已读回执 ------
+// 后端 MSG_READ_RECEIPT 只对单聊下发；找到自己发出的最后一条已确认消息，
+// 若其 seq 不超过对端已读位点则显示“已读”。
+const lastSelfMessage = computed<MessageRow | null>(() => {
+  for (let i = props.messages.length - 1; i >= 0; i -= 1) {
+    const message = props.messages[i]
+    if (message && message.payload.from === 'self' && message.status !== 1) {
+      return message
+    }
+  }
+  return null
+})
+
+function readReceiptText(message: MessageRow): string {
+  if (props.isGroup || message !== lastSelfMessage.value) return ''
+  const seq = message.seq ?? 0
+  if (seq <= 0 || message.status === -1) return ''
+  return seq <= (props.peerReadSeq ?? 0) ? '已读' : '未读'
+}
 
 function getText(message: MessageRow): string {
   const value = message.payload.text
@@ -47,16 +143,80 @@ function getTime(message: MessageRow): string {
 function getSenderName(message: MessageRow): string {
   const uuid = message.payload.fromUuid as string
   if (!uuid) return '未知'
+  if (uuid === props.currentUserUuid) return '我'
   if (props.groupMembers) {
     const member = props.groupMembers.find(m => m.userUuid === uuid)
     if (member) {
       return member.groupNickname || member.nickname || uuid.substring(0, 8)
     }
   }
+  // 单聊对端没有群成员表可查，直接用会话标题（好友备注/昵称）。
+  if (!props.isGroup && props.title) {
+    return props.title
+  }
   return uuid.substring(0, 8)
 }
 
+// ------ 消息头像与聚簇 ------
+// 头像解析优先级：自己 → selfAvatar；群聊对端 → 群成员表 avatar；单聊对端 → peerAvatar。
+// 均无时回退为按 UUID 着色的首字色块。
+function getMessageAvatarUrl(message: MessageRow): string {
+  if (getFrom(message) === 'self') {
+    return props.selfAvatar || ''
+  }
+  const uuid = (message.payload.fromUuid as string) || ''
+  if (props.isGroup && props.groupMembers) {
+    const member = props.groupMembers.find(m => m.userUuid === uuid)
+    if (member?.avatar) {
+      return resolveAssetUrl(member.avatar as string)
+    }
+    return ''
+  }
+  return props.peerAvatar || ''
+}
+
+function getMessageAvatarStyle(message: MessageRow): Record<string, string> {
+  const uuid = (message.payload.fromUuid as string) || ''
+  const palette = avatarPaletteFromId(uuid)
+  return { background: palette.bg, color: palette.fg }
+}
+
+function getMessageAvatarInitial(message: MessageRow): string {
+  return avatarInitial(getSenderName(message))
+}
+
+// 消息聚簇：同一发送者在 3 分钟内的连续消息只保留首条的头像和昵称，
+// 后续消息用等宽占位对齐，减少视觉噪音（Telegram/Slack 风格）。
+const CLUSTER_WINDOW_MS = 3 * 60 * 1000
+
+function isClusterStart(index: number): boolean {
+  if (shouldShowDivider(index)) return true
+  const current = props.messages[index]
+  const previous = props.messages[index - 1]
+  if (!current || !previous) return true
+  if (previous.status === 1) return true // 上一条已撤回，显示为居中系统条，重新起簇
+  const currentUuid = (current.payload.fromUuid as string) || ''
+  const previousUuid = (previous.payload.fromUuid as string) || ''
+  if (currentUuid !== previousUuid) return true
+  return current.sendTime - previous.sendTime > CLUSTER_WINDOW_MS
+}
+
+// ------ 头部信息 ------
+const headerPalette = computed(() => avatarPaletteFromId(props.convId || props.title))
+
+const headerSubtitle = computed(() => {
+  if (props.isGroup) {
+    return `群聊 · ${props.groupMembers?.length ?? 0} 名成员`
+  }
+  if (props.peerOnline === true) return '在线'
+  if (props.peerOnline === false) return '离线'
+  return '单聊'
+})
+
 const repliedMessage = ref<MessageRow | null>(null)
+
+// 输入框有内容（非纯空白）才允许发送
+const canSend = computed(() => draftProxy.value.trim().length > 0)
 
 function handleDoubleClickBubble(message: MessageRow) {
   if (message.status === 1) return
@@ -79,25 +239,38 @@ function handleSend(): void {
   } else {
     emit('send', text)
   }
+  void scrollToBottom()
+  void nextTick(adjustComposerHeight)
+}
+
+// Enter 发送、Shift+Enter 换行；输入法组合中（拼音候选）回车不发送。
+function handleComposerKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Enter' || event.shiftKey) {
+    return
+  }
+  if (event.isComposing) {
+    return
+  }
+  event.preventDefault()
+  handleSend()
 }
 
 // ------ Permission Aware Recall Logic ------
+// 与后端 msg 域规则严格对齐（apps/msg/internal/domain/message/service.go RecallMessage）：
+//   1) 自己的消息只能在 2 分钟窗口内撤回（管理员也不例外）；
+//   2) 群主/管理员可以不限时撤回“他人”的消息；
+//   3) 单聊里永远不能撤回对方的消息。
 function canRecall(message: MessageRow): boolean {
   if (message.status === 1) return false // Already recalled
-  
-  // Rule 1: Self message can be recalled within 2 minutes (120,000 milliseconds)
+
   const isSelf = message.payload.fromUuid === props.currentUserUuid
-  const timeLimitPassed = Date.now() - message.sendTime < 120000
-  if (isSelf && timeLimitPassed) {
-    return true
+  const withinRecallWindow = Date.now() - message.sendTime < 120000
+
+  if (isSelf) {
+    return withinRecallWindow
   }
 
-  // Rule 2: In a group, group owner/admin (role >= 1) can recall ANY member's message at any time
-  if (props.isGroup && props.currentUserGroupRole >= 1) {
-    return true
-  }
-
-  return false
+  return props.isGroup && props.currentUserGroupRole >= 1
 }
 
 // Context Menu State
@@ -209,7 +382,7 @@ function processFiles(files: FileList) {
       reader.readAsText(file)
     } else {
       // Elegant glassmorphic feedback for media/binary files
-      toast.info(`“${file.name}” 是媒体/二进制文件。为了保障端到端加密通道的安全与速度，目前仅支持文本消息发送，已为您提取该文件的基本信息。`, {
+      toast.info(`“${file.name}” 是媒体/二进制文件。当前版本仅支持文本消息发送，已为您提取该文件的基本信息。`, {
         duration: 5000
       })
       draftProxy.value = (draftProxy.value ? draftProxy.value + ' ' : '') + `[文件: ${file.name} (${formatBytes(file.size)})]`
@@ -478,16 +651,25 @@ function handleToolClick(key: string) {
   if (key === 'emoji') {
     toggleEmojiPicker()
   } else if (key === 'image') {
-    toast.info('为了保障端到端加密通道的安全与速度，目前仅支持文本聊天，您可以通过直接拖拽或粘贴文本/代码文件来极速导入！')
+    toast.info('当前版本仅支持文本聊天，您可以通过直接拖拽或粘贴文本/代码文件来快速导入内容。')
   } else if (key === 'file') {
-    toast.info('您可以通过直接拖拽文本/代码文件，或复制文件粘贴在编辑框内，系统将自动极速识别并导入！')
+    toast.info('您可以直接拖拽文本/代码文件到输入框，或复制后粘贴，系统会自动识别并导入。')
   }
 }
 
 const isTyping = ref(false)
 let typingTimeout: any = null
 
+// 输入框自适应高度：随内容增长，上限 160px 后内部滚动。
+function adjustComposerHeight(): void {
+  const el = textareaRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(el.scrollHeight, 160)}px`
+}
+
 watch(draftProxy, () => {
+  void nextTick(adjustComposerHeight)
   if (!draftProxy.value) {
     isTyping.value = false
     return
@@ -505,9 +687,31 @@ watch(draftProxy, () => {
 <template>
   <section class="message-pane">
     <header class="header">
-      <div class="title-wrap">
-        <h2>{{ props.title || '选择会话' }}</h2>
-        <p>在线 · 草稿自动写入本地缓存</p>
+      <div class="header-left">
+        <div class="header-avatar-wrap">
+          <img
+            v-if="props.conversationAvatar"
+            :src="props.conversationAvatar"
+            class="header-avatar"
+            alt=""
+          />
+          <span
+            v-else
+            class="header-avatar header-avatar--initial"
+            :style="{ background: headerPalette.bg, color: headerPalette.fg }"
+          >
+            {{ avatarInitial(props.title) }}
+          </span>
+          <span
+            v-if="!props.isGroup && props.peerOnline !== null && props.peerOnline !== undefined"
+            class="presence-dot"
+            :class="{ 'presence-dot--online': props.peerOnline }"
+          />
+        </div>
+        <div class="title-wrap">
+          <h2>{{ props.title || '选择会话' }}</h2>
+          <p :class="{ 'subtitle--online': props.peerOnline === true }">{{ headerSubtitle }}</p>
+        </div>
       </div>
       <!-- slot injection point for ChatView extra controls -->
       <div class="actions-slot-wrap">
@@ -515,8 +719,18 @@ watch(draftProxy, () => {
       </div>
     </header>
 
-    <main class="history">
-      <p v-if="props.messages.length === 0" class="empty">暂无消息，发送一条开始聊天。</p>
+    <div class="history-wrap">
+      <main ref="historyRef" class="history" @scroll.passive="handleHistoryScroll">
+      <div v-if="props.messages.length === 0" class="empty-state">
+        <span
+          class="empty-avatar"
+          :style="{ background: headerPalette.bg, color: headerPalette.fg }"
+        >
+          {{ avatarInitial(props.title) }}
+        </span>
+        <p class="empty-title">和 {{ props.title || 'TA' }} 打个招呼吧</p>
+        <p class="empty-hint">消息在服务端云端存储，多端同步</p>
+      </div>
       <div v-else class="message-list">
         <template v-for="(message, index) in props.messages" :key="message.msgId">
           <!-- Center Timeline Divider Badge -->
@@ -533,27 +747,52 @@ watch(draftProxy, () => {
           <article
             v-else
             class="bubble-row"
-            :class="{ 'bubble-row--self': getFrom(message) === 'self' }"
+            :class="{
+              'bubble-row--self': getFrom(message) === 'self',
+              'bubble-row--continued': !isClusterStart(index)
+            }"
           >
+            <!-- 头像列：聚簇首条显示头像，后续消息占位对齐 -->
+            <div class="avatar-col">
+              <template v-if="isClusterStart(index)">
+                <img
+                  v-if="getMessageAvatarUrl(message)"
+                  :src="getMessageAvatarUrl(message)"
+                  class="msg-avatar"
+                  alt=""
+                />
+                <span
+                  v-else
+                  class="msg-avatar msg-avatar--initial"
+                  :style="getMessageAvatarStyle(message)"
+                >
+                  {{ getMessageAvatarInitial(message) }}
+                </span>
+              </template>
+            </div>
+
             <div class="bubble-container">
-              <span v-if="props.isGroup && getFrom(message) === 'peer'" class="sender-name">
+              <span
+                v-if="props.isGroup && getFrom(message) === 'peer' && isClusterStart(index)"
+                class="sender-name"
+              >
                 {{ getSenderName(message) }}
               </span>
               <div class="bubble-wrapper group relative">
                 <!-- Floating Glassmorphic Quick Action Bar -->
                 <div class="bubble-action-bar">
-                  <button 
-                    type="button" 
-                    class="action-btn" 
+                  <button
+                    type="button"
+                    class="action-btn"
                     title="复制文本"
                     @click="triggerQuickCopy(getText(message))"
                   >
                     <Copy :size="12" />
                   </button>
-                  <button 
+                  <button
                     v-if="canRecall(message)"
-                    type="button" 
-                    class="action-btn action-btn--danger" 
+                    type="button"
+                    class="action-btn action-btn--danger"
                     title="撤回消息"
                     @click="triggerQuickRecall(message.msgId)"
                   >
@@ -570,7 +809,7 @@ watch(draftProxy, () => {
                 >
                   <AlertCircle class="alert-icon" :size="18" />
                 </button>
-                <div 
+                <div
                   class="bubble cursor-pointer"
                   @contextmenu="openMessageMenu($event, message)"
                   @dblclick="handleDoubleClickBubble(message)"
@@ -579,11 +818,33 @@ watch(draftProxy, () => {
                   <time>{{ getTime(message) }}</time>
                 </div>
               </div>
+              <span
+                v-if="getFrom(message) === 'self' && readReceiptText(message)"
+                class="read-receipt"
+                :class="{ 'read-receipt--read': readReceiptText(message) === '已读' }"
+              >
+                {{ readReceiptText(message) }}
+              </span>
             </div>
           </article>
         </template>
       </div>
     </main>
+
+      <!-- 悬浮“回到底部/新消息”按钮：固定在消息可视区右下角 -->
+      <transition name="fab-pop">
+        <button
+          v-if="showScrollFab || pendingNewCount > 0"
+          type="button"
+          class="scroll-fab"
+          :class="{ 'scroll-fab--unread': pendingNewCount > 0 }"
+          @click="jumpToLatest"
+        >
+          <ChevronDown :size="15" />
+          <span v-if="pendingNewCount > 0">{{ pendingNewCount > 99 ? '99+' : pendingNewCount }} 条新消息</span>
+        </button>
+      </transition>
+    </div>
 
     <footer class="composer relative">
       <!-- Glassmorphic Reply Quote Card -->
@@ -681,20 +942,28 @@ watch(draftProxy, () => {
         <textarea
           ref="textareaRef"
           v-model="draftProxy"
-          placeholder="输入消息，Enter 换行，点击发送提交，支持拖拽或粘贴文本文件..."
-          rows="4"
+          placeholder="输入消息，Enter 发送，Shift+Enter 换行，支持拖拽或粘贴文本文件..."
+          rows="2"
+          @keydown="handleComposerKeydown"
           @paste="handlePaste"
           @drop.prevent="handleDrop"
           @dragover.prevent
         />
-        <button type="button" class="send-btn" @click="handleSend">发送</button>
+        <button
+          type="button"
+          class="send-btn"
+          :disabled="!canSend"
+          @click="handleSend"
+        >
+          发送
+        </button>
       </div>
       <div class="composer-actions">
         <span class="flex items-center gap-1.5 text-neutral-400">
           <span class="indicator-lock-dot" :class="{ 'indicator-lock-dot--typing': isTyping }"></span>
-          <span>{{ isTyping ? '加密草稿已存至安全缓存' : '端到端加密安全会话' }}</span>
+          <span>{{ isTyping ? '草稿已自动存入本地缓存' : '草稿自动保存 · 消息服务端存储' }}</span>
         </span>
-        <span>Enter 换行，Enter/发送提交</span>
+        <span>Enter 发送 · Shift+Enter 换行</span>
       </div>
     </footer>
 
@@ -758,6 +1027,58 @@ watch(draftProxy, () => {
   color: var(--c-text-main);
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.header-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.header-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 14px;
+  object-fit: cover;
+  display: block;
+  box-shadow: var(--shadow-sm);
+}
+
+.header-avatar--initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-weight: 700;
+  user-select: none;
+}
+
+/* 在线状态圆点：叠在头像右下角 */
+.presence-dot {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 11px;
+  height: 11px;
+  border-radius: var(--radius-full);
+  background: #c3ccd6;
+  border: 2px solid #fff;
+}
+
+.presence-dot--online {
+  background: var(--c-primary);
+  box-shadow: 0 0 6px rgba(0, 198, 112, 0.6);
+}
+
+.subtitle--online {
+  color: var(--c-primary) !important;
+  font-weight: 600;
+}
+
 .title-wrap p {
   margin: 4px 0 0;
   font-size: 12px;
@@ -769,6 +1090,14 @@ watch(draftProxy, () => {
   align-items: center;
 }
 
+.history-wrap {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
 .history {
   flex: 1;
   overflow-y: auto;
@@ -776,16 +1105,76 @@ watch(draftProxy, () => {
   padding-bottom: 40px;
 }
 
+/* 悬浮“回到底部/新消息”按钮 */
+.scroll-fab {
+  position: absolute;
+  right: 20px;
+  bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: var(--blur-md);
+  -webkit-backdrop-filter: var(--blur-md);
+  color: var(--c-text-sub);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 12px;
+  cursor: pointer;
+  box-shadow: var(--shadow-lg);
+  z-index: 20;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.scroll-fab:hover {
+  color: var(--c-primary-active);
+  border-color: rgba(0, 198, 112, 0.3);
+  transform: translateY(-2px);
+}
+
+.scroll-fab--unread {
+  background: var(--c-primary);
+  border-color: var(--c-primary);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(0, 198, 112, 0.35);
+}
+
+.scroll-fab--unread:hover {
+  background: var(--c-primary-hover);
+  color: #fff;
+}
+
+.fab-pop-enter-active,
+.fab-pop-leave-active {
+  transition: opacity 0.18s var(--ease-out), transform 0.22s var(--ease-spring);
+}
+
+.fab-pop-enter-from,
+.fab-pop-leave-to {
+  opacity: 0;
+  transform: translateY(8px) scale(0.9);
+}
+
 .message-list {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 2px;
 }
 
 .bubble-row {
   display: flex;
   justify-content: flex-start;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
   animation: slideUp 0.3s var(--ease-out) forwards;
+}
+
+/* 聚簇内的后续消息：紧贴上一条，头像列留白对齐 */
+.bubble-row--continued {
+  margin-top: 0;
 }
 
 @keyframes slideUp {
@@ -794,7 +1183,32 @@ watch(draftProxy, () => {
 }
 
 .bubble-row--self {
-  justify-content: flex-end;
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+
+/* 头像列：固定宽度，聚簇后续消息以空占位保持缩进 */
+.avatar-col {
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.msg-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  object-fit: cover;
+  display: block;
+  box-shadow: var(--shadow-sm);
+  user-select: none;
+}
+
+.msg-avatar--initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
 }
 
 .bubble-container {
@@ -861,6 +1275,18 @@ watch(draftProxy, () => {
   font-weight: 500;
 }
 
+/* P2P 已读/未读回执，仅出现在自己最后一条已确认消息下方 */
+.read-receipt {
+  font-size: 10px;
+  color: var(--c-text-muted);
+  user-select: none;
+  margin-right: 2px;
+}
+
+.read-receipt--read {
+  color: var(--c-primary);
+}
+
 .bubble {
   border-radius: 16px 16px 16px 0; /* Asymmetric bottom-left tail for peer */
   padding: 11px 15px;
@@ -886,6 +1312,12 @@ watch(draftProxy, () => {
 
 .bubble-row--self .bubble:hover {
   box-shadow: 0 6px 20px rgba(0, 198, 112, 0.22);
+}
+
+/* 聚簇内的后续消息：不再带“尾巴”，统一全圆角 */
+.bubble-row--continued .bubble,
+.bubble-row--continued.bubble-row--self .bubble {
+  border-radius: 16px;
 }
 
 .bubble p {
@@ -932,12 +1364,41 @@ watch(draftProxy, () => {
   user-select: none;
 }
 
-.empty {
+/* 空会话引导态 */
+.empty-state {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.empty-avatar {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  box-shadow: var(--shadow-md);
+}
+
+.empty-title {
   margin: 0;
-  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--c-text-main);
+}
+
+.empty-hint {
+  margin: 0;
+  font-size: 12px;
   color: var(--c-text-muted);
-  font-size: 14px;
-  padding-top: 40px;
 }
 
 .composer {
@@ -997,6 +1458,9 @@ watch(draftProxy, () => {
   font-size: 15px;
   font-family: inherit;
   outline: none;
+  min-height: 52px;
+  max-height: 160px;
+  overflow-y: auto;
   transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.02);
 }
@@ -1036,6 +1500,14 @@ watch(draftProxy, () => {
 .send-btn:active {
   transform: translateY(0);
   box-shadow: 0 2px 6px rgba(0, 198, 112, 0.3);
+}
+
+/* 空文案时禁用发送：视觉灰化并禁止交互反馈 */
+.send-btn:disabled {
+  background: #c9d3dc;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
 }
 
 .composer-actions {

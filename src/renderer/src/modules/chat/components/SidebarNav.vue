@@ -123,6 +123,27 @@ function handleAvatarClick() {
   explodeParticles()
   emit('clickAvatar')
 }
+
+// 退出登录二次确认：首次点击进入待确认态（按钮变红），2.5 秒内再次点击才真正退出。
+const logoutArmed = ref(false)
+let logoutArmTimer: ReturnType<typeof setTimeout> | null = null
+
+function handleLogoutClick() {
+  if (logoutArmed.value) {
+    logoutArmed.value = false
+    if (logoutArmTimer) {
+      clearTimeout(logoutArmTimer)
+      logoutArmTimer = null
+    }
+    emit('logout')
+    return
+  }
+  logoutArmed.value = true
+  logoutArmTimer = setTimeout(() => {
+    logoutArmed.value = false
+    logoutArmTimer = null
+  }, 2500)
+}
 </script>
 
 <template>
@@ -133,9 +154,9 @@ function handleAvatarClick() {
     </header>
 
     <nav class="nav">
-      <div 
+      <div
         class="nav-indicator-pill"
-        :style="{ transform: `translateY(${activeNavIndex * 60}px)` }"
+        :style="{ transform: `translateY(${activeNavIndex * 66}px)` }"
       />
       <button
         v-for="item in navItems"
@@ -146,7 +167,8 @@ function handleAvatarClick() {
         :title="item.label"
         @click="handleSelect(item.key)"
       >
-        <component :is="item.icon" :size="22" stroke-width="2.2" class="nav-icon" />
+        <component :is="item.icon" :size="20" stroke-width="2.2" class="nav-icon" />
+        <small class="nav-label">{{ item.label }}</small>
         <small v-if="item.key === 'discover' && (props.discoverBadge || 0) > 0" class="nav-badge">
           {{ Math.min(props.discoverBadge || 0, 99) }}
         </small>
@@ -161,7 +183,13 @@ function handleAvatarClick() {
           <span v-else>{{ userInitial }}</span>
         </button>
       </div>
-      <button class="logout" type="button" title="退出登录" @click="emit('logout')">
+      <button
+        class="logout"
+        :class="{ 'logout--armed': logoutArmed }"
+        type="button"
+        :title="logoutArmed ? '再次点击确认退出' : '退出登录'"
+        @click="handleLogoutClick"
+      >
         <LogOut :size="20" stroke-width="2.2" />
       </button>
     </footer>
@@ -210,22 +238,26 @@ function handleAvatarClick() {
 
 .nav-item {
   position: relative;
-  width: 48px;
-  height: 48px;
+  width: 54px;
+  height: 54px;
   border: none;
   background: transparent;
   border-radius: var(--radius-md);
   padding: 0;
   cursor: pointer;
   color: var(--c-text-on-dark-muted);
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
   transition: all var(--duration-fast) var(--ease-out);
   z-index: 2;
 }
 
 .nav-item:hover {
   color: #fff;
+  background: rgba(255, 255, 255, 0.06);
   transform: translateY(-2px);
 }
 
@@ -233,12 +265,20 @@ function handleAvatarClick() {
   color: var(--c-primary) !important;
 }
 
+.nav-label {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.5px;
+  user-select: none;
+}
+
 .nav-indicator-pill {
   position: absolute;
   top: 0;
-  left: 6px;
-  width: 48px;
-  height: 48px;
+  left: 3px;
+  width: 54px;
+  height: 54px;
   background: rgba(0, 198, 112, 0.12);
   border-radius: var(--radius-md);
   box-shadow: 0 4px 12px rgba(0, 198, 112, 0.08);
@@ -250,8 +290,8 @@ function handleAvatarClick() {
 .nav-indicator-pill::before {
   content: '';
   position: absolute;
-  left: -14px;
-  top: 12px;
+  left: -11px;
+  top: 15px;
   width: 3px;
   height: 24px;
   border-radius: 0 4px 4px 0;
@@ -335,6 +375,15 @@ function handleAvatarClick() {
   background: var(--c-bg-sidebar-active);
   border-color: rgba(255, 255, 255, 0.3);
   transform: translateY(-2px);
+}
+
+/* 退出待确认态：变红提示，2.5 秒后自动还原 */
+.logout--armed,
+.logout--armed:hover {
+  color: #ff6b6d;
+  background: rgba(255, 77, 79, 0.16);
+  border-color: rgba(255, 77, 79, 0.45);
+  animation: pulse-dot 1.2s infinite;
 }
 
 .status-dot {

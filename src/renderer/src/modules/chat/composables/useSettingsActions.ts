@@ -10,6 +10,7 @@ import type { useDeviceStore } from '../../../stores/device.store'
 import type { useFriendStore } from '../../../stores/friend.store'
 import type { useUserStore } from '../../../stores/user.store'
 import { normalizeErrorMessage } from '../../../shared/utils/error'
+import { appConfirm } from '../../../shared/composables/useConfirm'
 
 interface UseSettingsActionsOptions {
   userUuid: MaybeRefOrGetter<string>
@@ -99,7 +100,11 @@ export function useSettingsActions(options: UseSettingsActionsOptions) {
 
     const nickname =
       getString(selectedBlacklistRow.payload, 'nickname') || selectedBlacklistRow.peerUuid
-    const confirmed = window.confirm(`确认将「${nickname}」移出黑名单吗？`)
+    const confirmed = await appConfirm({
+      title: '移出黑名单',
+      message: `确认将「${nickname}」移出黑名单吗？移出后对方可以重新向你发送消息。`,
+      confirmText: '移出'
+    })
     if (!confirmed) {
       return
     }
