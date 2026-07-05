@@ -30,7 +30,7 @@ const CODE_ACCOUNT_DELETED = 11029
 
 const AUTH_ERROR_MESSAGES: Record<AuthAction, Partial<Record<number, string>>> = {
   password_login: {
-    [CODE_PARAM_ERROR]: '请输入账号和密码。',
+    [CODE_PARAM_ERROR]: '登录信息格式有误，请检查后重试。',
     [CODE_PASSWORD_ERROR]: '账号或密码错误，请重试。',
     [CODE_ACCOUNT_NOT_FOUND]: '账号不存在，请检查后重试。',
     [CODE_ACCOUNT_DELETED]: '账号已注销，暂不可登录。'
