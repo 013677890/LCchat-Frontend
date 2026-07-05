@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import Database from 'better-sqlite3'
 import { join } from 'node:path'
+import { mkdirSync } from 'node:fs'
 import { runMigrations } from './migration'
 
 let localDB: Database.Database | null = null
@@ -21,6 +22,9 @@ export function initLocalDB(): Database.Database {
     return localDB
   }
 
+  // userData 可能指向尚不存在的子目录（如多实例 LCCHAT_INSTANCE），
+  // better-sqlite3 不会自动创建父目录，需先确保目录存在。
+  mkdirSync(app.getPath('userData'), { recursive: true })
   localDB = new Database(getLocalDBPath())
   applyPragmas(localDB)
   runMigrations(localDB)

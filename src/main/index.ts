@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'node:path'
+import { mkdirSync } from 'node:fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { closeLocalDB } from './db/sqlite'
@@ -8,9 +9,13 @@ import { registerIpcHandlers } from './ipc/register'
 // 多实例并行支持（如同时登录两个账号联调）：
 // 设置 LCCHAT_INSTANCE=<tag> 后，每个实例使用独立的 userData 目录，
 // 彼此的 localStorage 登录态与本地 sqlite 缓存互不干扰。
+// Electron 只保证默认 userData 存在，切换后的子目录需要自行创建，
+// 否则 device.json / session.json / lcchat.db 的首次写入都会 ENOENT。
 const instanceTag = process.env.LCCHAT_INSTANCE
 if (instanceTag) {
-  app.setPath('userData', join(app.getPath('userData'), `instance-${instanceTag}`))
+  const instanceDir = join(app.getPath('userData'), `instance-${instanceTag}`)
+  mkdirSync(instanceDir, { recursive: true })
+  app.setPath('userData', instanceDir)
 }
 
 function createWindow(): void {

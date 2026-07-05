@@ -1,5 +1,5 @@
 import { app, type IpcMain } from 'electron'
-import { readFile, unlink, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { IPC_CHANNELS } from './channels'
 import type { SessionData } from '../../shared/types/localdb'
@@ -39,6 +39,8 @@ async function loadSessionFromDisk(): Promise<void> {
 
 async function saveSessionToDisk(payload: SessionData): Promise<void> {
   cachedSession = payload
+  // userData 可能指向尚不存在的子目录（如多实例 LCCHAT_INSTANCE），写入前确保目录存在
+  await mkdir(app.getPath('userData'), { recursive: true })
   await writeFile(sessionFilePath(), JSON.stringify(payload), 'utf-8')
 }
 
