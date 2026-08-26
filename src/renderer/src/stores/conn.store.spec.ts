@@ -7,6 +7,7 @@ import { useFriendStore } from './friend.store'
 import { useGroupStore } from './group.store'
 import { useSessionStore } from './session.store'
 import { decodeMessageEnvelope } from '../shared/utils/pb-codec'
+import { fetchGroupList, fetchGroupMembers } from '../modules/group/api'
 
 vi.mock('vue-sonner', () => ({
   toast: {
@@ -24,7 +25,39 @@ vi.mock('../shared/utils/pb-codec', () => ({
   decodeErrorFrame: vi.fn()
 }))
 
+vi.mock('../modules/group/api', () => ({
+  addGroupMembers: vi.fn(),
+  applyJoinGroup: vi.fn(),
+  cancelJoinGroupApplication: vi.fn(),
+  createGroup: vi.fn(),
+  dismissGroup: vi.fn(),
+  fetchGroupInfo: vi.fn(),
+  fetchGroupList: vi.fn(),
+  fetchGroupMemberIDs: vi.fn(),
+  fetchGroupMembers: vi.fn(),
+  fetchJoinRequestPendingCount: vi.fn(),
+  fetchJoinRequests: vi.fn(),
+  fetchMyJoinGroupApplication: vi.fn(),
+  fetchMyJoinGroupApplications: vi.fn(),
+  fetchReviewedJoinRequests: vi.fn(),
+  leaveGroup: vi.fn(),
+  muteGroupMember: vi.fn(),
+  removeGroupMember: vi.fn(),
+  reviewJoinGroup: vi.fn(),
+  searchGroupMembers: vi.fn(),
+  searchGroups: vi.fn(),
+  transferGroupOwner: vi.fn(),
+  updateGroupInfo: vi.fn(),
+  updateGroupMemberNickname: vi.fn(),
+  updateGroupMuteSetting: vi.fn(),
+  updateGroupNotice: vi.fn(),
+  updateMemberRole: vi.fn(),
+  updateMyGroupNickname: vi.fn()
+}))
+
 const decodeMessageEnvelopeMock = vi.mocked(decodeMessageEnvelope)
+const fetchGroupListMock = vi.mocked(fetchGroupList)
+const fetchGroupMembersMock = vi.mocked(fetchGroupMembers)
 
 class FakeWebSocket {
   static instances: FakeWebSocket[] = []
@@ -65,7 +98,7 @@ describe('conn.store', () => {
     ;(globalThis as { WebSocket?: unknown }).WebSocket = FakeWebSocket
   })
 
-  it('resyncs conversations when group websocket events can change chat membership', async () => {
+  it('refreshes the active member list when group websocket events can change chat membership', async () => {
     setupAuthenticatedSession()
 
     const sessionStore = useSessionStore()
@@ -77,7 +110,46 @@ describe('conn.store', () => {
       .mockResolvedValue(undefined)
     vi.spyOn(friendStore, 'syncFromServer').mockResolvedValue(undefined)
     vi.spyOn(applyStore, 'syncInboxFromServer').mockResolvedValue(undefined)
-    const syncGroupsSpy = vi.spyOn(groupStore, 'syncGroups').mockResolvedValue(undefined)
+    fetchGroupListMock.mockResolvedValue({
+      data: {
+        groups: [
+          {
+            groupUuid: 'group-1',
+            name: '测试群',
+            avatar: '',
+            notice: '',
+            ownerUuid: 'user-1',
+            memberCount: 2,
+            addMode: 0,
+            muteAll: false
+          }
+        ]
+      }
+    } as never)
+    fetchGroupMembersMock.mockResolvedValue({
+      data: {
+        members: [
+          {
+            userUuid: 'member-1',
+            role: 0,
+            nickname: '更新后的成员',
+            avatar: '',
+            groupNickname: '',
+            muteUntil: 0
+          }
+        ]
+      }
+    } as never)
+    groupStore.activeGroup = {
+      groupUuid: 'group-1',
+      name: '测试群',
+      avatar: '',
+      notice: '',
+      ownerUuid: 'user-1',
+      memberCount: 2,
+      addMode: 0,
+      muteAll: false
+    }
 
     const connStore = useConnStore()
     connStore.connect()
@@ -101,7 +173,11 @@ describe('conn.store', () => {
 
     await socket.onmessage?.({ data: new ArrayBuffer(0) })
 
-    expect(syncGroupsSpy).toHaveBeenCalledTimes(1)
+    expect(fetchGroupListMock).toHaveBeenCalledTimes(1)
+    expect(fetchGroupMembersMock).toHaveBeenCalledWith('group-1')
+    expect(groupStore.activeMembers).toEqual([
+      expect.objectContaining({ userUuid: 'member-1', nickname: '更新后的成员' })
+    ])
     expect(syncConversationsSpy).toHaveBeenCalledWith('user-1')
     connStore.disconnect()
   })

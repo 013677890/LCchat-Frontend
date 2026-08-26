@@ -24,7 +24,7 @@ const MAX_HANDSHAKE_FAILURES_BEFORE_REFRESH = 2
 export const useConnStore = defineStore('conn', () => {
   const status = ref<'idle' | 'connecting' | 'connected' | 'reconnecting' | 'auth_failed'>('idle')
   const lastActiveTime = ref(Date.now())
-  
+
   let ws: WebSocket | null = null
   let heartbeatTimer: any = null
   let heartbeatTimeoutTimer: any = null
@@ -42,20 +42,18 @@ export const useConnStore = defineStore('conn', () => {
     const deviceId = authStore.session?.deviceId ?? ''
 
     let baseUrl = 'ws://localhost:8081'
-    
+
     try {
       const parsed = new URL(explicitWsUrl || gatewayUrl)
-      const protocol =
-        parsed.protocol === 'wss:' || parsed.protocol === 'https:' ? 'wss:' : 'ws:'
-      const port =
-        explicitWsUrl || parsed.port !== '8080' ? parsed.port : '8081'
+      const protocol = parsed.protocol === 'wss:' || parsed.protocol === 'https:' ? 'wss:' : 'ws:'
+      const port = explicitWsUrl || parsed.port !== '8080' ? parsed.port : '8081'
       const host = port ? `${parsed.hostname}:${port}` : parsed.hostname
       const path = explicitWsUrl ? parsed.pathname.replace(/\/$/, '') : ''
       baseUrl = `${protocol}//${host}${path}`
     } catch (e) {
       console.warn('Failed to parse WebSocket base URL, using defaults', e)
     }
-    
+
     return `${baseUrl}/ws?token=${encodeURIComponent(token)}&device_id=${encodeURIComponent(deviceId)}`
   }
 
@@ -71,10 +69,10 @@ export const useConnStore = defineStore('conn', () => {
 
     cleanup()
     status.value = status.value === 'reconnecting' ? 'reconnecting' : 'connecting'
-    
+
     const url = getWsUrl()
     console.log('[WS] Connecting to:', url)
-    
+
     try {
       ws = new WebSocket(url)
       ws.binaryType = 'arraybuffer'
@@ -185,7 +183,7 @@ export const useConnStore = defineStore('conn', () => {
           seq: 0
         })
         ws.send(envelope)
-        
+
         // Timeout if no response in 10s
         heartbeatTimeoutTimer = setTimeout(() => {
           console.warn('[WS] Heartbeat timeout, closing connection')
@@ -212,7 +210,7 @@ export const useConnStore = defineStore('conn', () => {
   }
 
   // 重连前检查登录态：token 已过期或连续握手失败时先走刷新。
-  // connect 服务握手会校验 Redis 中的 token 哈希，拿旧 token 重连只会持续 401。
+  // connect 服务握手只校验 AccessToken JWT 与 device_id；旧 AccessToken 在过期前仍可重连。
   // 刷新失败（refresh token 失效/设备被踢）则停止重连并标记 auth_failed，
   // 由 UI 引导用户重新登录，避免无限重连循环。
   async function refreshTokenIfNeeded(): Promise<void> {
@@ -264,7 +262,7 @@ export const useConnStore = defineStore('conn', () => {
         const msgItem = decodeMsgItem(envelope.data)
         console.log('[WS] Received MSG_PUSH:', msgItem)
         const ackSeq = await sessionStore.handleIncomingMessage(userUuid, msgItem)
-        
+
         if (envelope.ackRequired && ackSeq > 0) {
           sendAck(msgItem.convId, ackSeq, msgItem.msgId)
         }
@@ -297,7 +295,7 @@ export const useConnStore = defineStore('conn', () => {
         console.log('[WS] Event: FRIEND_APPLY_CREATED')
         await applyStore.syncInboxFromServer(userUuid)
         sessionStore.playNotificationSound()
-        
+
         const appStore = useAppStore()
         if (appStore.toastEnabled) {
           toast.info('您收到了一条新的好友申请！', {
@@ -328,7 +326,7 @@ export const useConnStore = defineStore('conn', () => {
         console.log('[WS] Event: GROUP_JOIN_REQUEST_CREATED')
         await groupStore.syncJoinRequests()
         sessionStore.playNotificationSound()
-        
+
         const appStore = useAppStore()
         if (appStore.toastEnabled) {
           toast.info('收到新的群组加群申请！', {
@@ -349,6 +347,9 @@ export const useConnStore = defineStore('conn', () => {
         console.log('[WS] Event: GROUP_JOIN_REQUEST_REVIEWED')
         await groupStore.syncJoinRequests()
         await groupStore.syncGroups()
+        if (groupStore.activeGroup) {
+          await groupStore.syncMembers(groupStore.activeGroup.groupUuid)
+        }
         await sessionStore.syncConversationsFromServer(userUuid)
         break
 
@@ -358,6 +359,9 @@ export const useConnStore = defineStore('conn', () => {
       case 'GROUP_MEMBER_MUTED':
         console.log('[WS] Event:', type)
         await groupStore.syncGroups()
+        if (groupStore.activeGroup) {
+          await groupStore.syncMembers(groupStore.activeGroup.groupUuid)
+        }
         await sessionStore.syncConversationsFromServer(userUuid)
         break
 

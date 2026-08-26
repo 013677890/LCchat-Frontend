@@ -114,9 +114,11 @@ const sendCodeLabel = computed(() => {
   return '发送验证码'
 })
 
-function switchMode(nextMode: AuthMode): void {
+function switchMode(nextMode: AuthMode, shouldClearFeedback = true): void {
   mode.value = nextMode
-  clearFeedback()
+  if (shouldClearFeedback) {
+    clearFeedback()
+  }
   stopCodeCooldown()
   codeCooldownSeconds.value = 0
 }
@@ -166,7 +168,7 @@ async function handleSubmitRegister(): Promise<void> {
   message.value = '注册成功，请使用账号密码登录。'
   account.value = registerEmail.value
   password.value = ''
-  switchMode('password')
+  switchMode('password', false)
 }
 
 async function handleSubmitResetPassword(): Promise<void> {
@@ -178,7 +180,7 @@ async function handleSubmitResetPassword(): Promise<void> {
   message.value = '密码重置成功，请使用新密码登录。'
   account.value = resetEmail.value
   password.value = ''
-  switchMode('password')
+  switchMode('password', false)
 }
 
 async function handleSubmit(): Promise<void> {
@@ -437,8 +439,8 @@ onBeforeUnmount(() => {
   -webkit-backdrop-filter: blur(24px);
   border-radius: var(--radius-xl);
   padding: 40px 32px;
-  box-shadow: 
-    0 24px 60px -15px rgba(0, 198, 112, 0.12), 
+  box-shadow:
+    0 24px 60px -15px rgba(0, 198, 112, 0.12),
     0 8px 24px -10px rgba(0, 0, 0, 0.05),
     inset 0 1px 0 rgba(255, 255, 255, 0.6);
   border: 1px solid rgba(255, 255, 255, 0.4);
@@ -465,7 +467,7 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 34px;
   font-weight: 800;
-  background: linear-gradient(135deg, var(--c-primary), #009A57);
+  background: linear-gradient(135deg, var(--c-primary), #009a57);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   letter-spacing: -1px;
@@ -519,8 +521,14 @@ onBeforeUnmount(() => {
 }
 
 @keyframes formFadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .field {
@@ -584,7 +592,8 @@ onBeforeUnmount(() => {
   letter-spacing: -0.2px;
 }
 
-.message, .error {
+.message,
+.error {
   margin: 16px 0 0;
   font-size: 13px;
   padding: 10px 14px;
@@ -595,8 +604,14 @@ onBeforeUnmount(() => {
 }
 
 @keyframes messageSlideDown {
-  from { opacity: 0; transform: translateY(-8px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .message {
@@ -669,22 +684,5 @@ button:disabled {
   border-color: rgba(0, 198, 112, 0.4);
   color: var(--c-primary-active);
   box-shadow: var(--shadow-sm);
-}
-
-.secondary {
-  background: rgba(0, 0, 0, 0.03);
-  color: var(--c-text-main);
-  box-shadow: none;
-  border: 1px solid rgba(0, 0, 0, 0.03);
-}
-
-.secondary:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.06);
-  border-color: rgba(0, 0, 0, 0.02);
-  box-shadow: none;
-}
-
-.secondary:active:not(:disabled) {
-  transform: scale(0.97);
 }
 </style>

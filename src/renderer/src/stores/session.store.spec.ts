@@ -317,19 +317,15 @@ describe('session.store message pull', () => {
       msgId: 'msg-1'
     })
     expect(writeFinished).toBe(true)
-    expect(upsertMessagesMock).toHaveBeenCalledWith(
-      'user-1',
-      'conv-1',
-      [
-        expect.objectContaining({
-          msgId: 'msg-1',
-          status: 1,
-          payload: expect.objectContaining({
-            text: '消息已撤回'
-          })
+    expect(upsertMessagesMock).toHaveBeenCalledWith('user-1', 'conv-1', [
+      expect.objectContaining({
+        msgId: 'msg-1',
+        status: 1,
+        payload: expect.objectContaining({
+          text: '消息已撤回'
         })
-      ]
-    )
+      })
+    ])
     expect(store.activeMessages[0]).toEqual(
       expect.objectContaining({
         msgId: 'msg-1',
@@ -339,6 +335,72 @@ describe('session.store message pull', () => {
         })
       })
     )
+  })
+
+  it('repairs a recalled message that is absent from the active cache', async () => {
+    httpPostMock.mockResolvedValueOnce({
+      data: {
+        data: {
+          messages: [
+            {
+              ...backendMsg(1),
+              status: 1,
+              content: JSON.stringify({ text: '对方撤回了一条消息' })
+            }
+          ]
+        }
+      }
+    })
+
+    const store = useSessionStore()
+    store.currentUserUuid = 'user-1'
+
+    await store.handleIncomingRecall('user-1', { convId: 'conv-1', msgId: 'msg-1' })
+
+    expect(httpPostMock).toHaveBeenCalledWith('/api/v1/auth/messages/get-by-ids', {
+      convId: 'conv-1',
+      msgIds: ['msg-1']
+    })
+    expect(upsertMessagesMock).toHaveBeenCalledWith('user-1', 'conv-1', [
+      expect.objectContaining({ msgId: 'msg-1', status: 1 })
+    ])
+  })
+
+  it('reloads server-derived unread counts after another device marks a conversation as read', async () => {
+    httpGetMock.mockResolvedValueOnce({
+      data: {
+        data: {
+          conversations: [
+            {
+              convId: 'conv-1',
+              convType: 1,
+              targetUuid: 'peer-1',
+              unreadCount: 2,
+              updatedAt: 1
+            }
+          ],
+          hasMore: false
+        }
+      }
+    })
+
+    const store = useSessionStore()
+    store.currentUserUuid = 'user-1'
+    store.conversations = [
+      {
+        userUuid: 'user-1',
+        convId: 'conv-1',
+        payload: { unread: 5, preview: '' },
+        updatedAt: 1
+      }
+    ]
+
+    await store.handleIncomingMarkRead('user-1', { convId: 'conv-1', readSeq: 3 })
+
+    expect(httpGetMock).toHaveBeenCalledWith('/api/v1/auth/conversations', {
+      params: { pageSize: 100 }
+    })
+    expect(store.conversations[0]?.payload.unread).toBe(2)
   })
 
   it('replaces the local conversation cache when server sync returns the full list', async () => {

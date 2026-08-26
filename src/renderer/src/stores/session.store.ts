@@ -24,6 +24,10 @@ interface ConversationsData {
   nextCursor?: string
 }
 
+interface GetMessagesByIdsData {
+  messages?: any[]
+}
+
 async function pullMessageRows(
   userUuid: string,
   convId: string,
@@ -120,20 +124,20 @@ function getNumber(payload: JsonObject, key: string, fallback = 0): number {
 }
 
 function mapMsgItemToRow(userUuid: string, item: any): MessageRow {
-  let text = ""
+  let text = ''
   try {
     const contentObj = typeof item.content === 'string' ? JSON.parse(item.content) : item.content
-    text = contentObj.text || contentObj.preview || ""
+    text = contentObj.text || contentObj.preview || ''
   } catch (e) {
-    text = item.content || ""
+    text = item.content || ''
   }
 
   if (item.status === 1) {
     try {
       const contentObj = typeof item.content === 'string' ? JSON.parse(item.content) : item.content
-      text = contentObj.text || "撤回了一条消息"
+      text = contentObj.text || '撤回了一条消息'
     } catch (e) {
-      text = "撤回了一条消息"
+      text = '撤回了一条消息'
     }
   }
 
@@ -155,13 +159,13 @@ function mapMsgItemToRow(userUuid: string, item: any): MessageRow {
 }
 
 function mapConversationItemToRow(userUuid: string, item: any): ConversationRow {
-  let previewText = ""
+  let previewText = ''
   if (item.lastMsg) {
     try {
       const parsed = JSON.parse(item.lastMsg.previewJson || '{}')
-      previewText = parsed.preview || parsed.text || ""
+      previewText = parsed.preview || parsed.text || ''
     } catch (e) {
-      previewText = item.lastMsg.previewJson || ""
+      previewText = item.lastMsg.previewJson || ''
     }
   }
 
@@ -366,14 +370,14 @@ export const useSessionStore = defineStore('session', () => {
         seenCursors.add(nextCursor)
         cursor = nextCursor
       }
-      
+
       const mapped = items.map((item: any) => mapConversationItemToRow(userUuid, item))
       const removedActiveConvId =
         activeConvId.value && !mapped.some((item) => item.convId === activeConvId.value)
           ? activeConvId.value
           : ''
       await safeWrite(() => window.api.localdb.chat.replaceConversations(userUuid, mapped))
-      
+
       conversations.value = sortConversations(mapped)
       if (removedActiveConvId) {
         dropConversationRuntimeState(removedActiveConvId)
@@ -407,7 +411,7 @@ export const useSessionStore = defineStore('session', () => {
         followHasMore: pullDirection === 1,
         limit: 100
       })
-      
+
       if (pulledRows.length > 0) {
         await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, pulledRows))
         messages = upsertMessages(messages, pulledRows)
@@ -424,10 +428,10 @@ export const useSessionStore = defineStore('session', () => {
     setOlderHistoryExhausted(convId, messages.length === 0 || minSeq <= 1)
 
     activeDraft.value = await safeRead(() => window.api.localdb.chat.getDraft(userUuid, convId), '')
-    
+
     // Mark as read
     if (messages.length > 0) {
-      const maxSeq = Math.max(...messages.map(m => m.seq || 0))
+      const maxSeq = Math.max(...messages.map((m) => m.seq || 0))
       if (maxSeq > 0) {
         await markRead(convId, maxSeq)
       }
@@ -440,10 +444,7 @@ export const useSessionStore = defineStore('session', () => {
     await safeWrite(() => window.api.localdb.chat.saveDraft(userUuid, convId, draft))
   }
 
-  async function setDraft(
-    draft: string,
-    options: { immediate?: boolean } = {}
-  ): Promise<void> {
+  async function setDraft(draft: string, options: { immediate?: boolean } = {}): Promise<void> {
     activeDraft.value = draft
     if (!currentUserUuid.value || !activeConvId.value) return
 
@@ -485,7 +486,13 @@ export const useSessionStore = defineStore('session', () => {
       const localRows =
         typeof oldestSendTime === 'number'
           ? await safeRead(
-              () => window.api.localdb.chat.getMessages(userUuid, convId, oldestSendTime, MESSAGE_PAGE_SIZE),
+              () =>
+                window.api.localdb.chat.getMessages(
+                  userUuid,
+                  convId,
+                  oldestSendTime,
+                  MESSAGE_PAGE_SIZE
+                ),
               []
             )
           : []
@@ -503,7 +510,9 @@ export const useSessionStore = defineStore('session', () => {
           })
 
           if (pulledRows.length > 0) {
-            await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, pulledRows))
+            await safeWrite(() =>
+              window.api.localdb.chat.upsertMessages(userUuid, convId, pulledRows)
+            )
             rowsToMerge = upsertMessages(rowsToMerge, pulledRows)
           }
         } catch (error) {
@@ -536,8 +545,8 @@ export const useSessionStore = defineStore('session', () => {
         readSeq
       })
       const unreadCount = Number(response.data.data?.unreadCount ?? 0)
-      
-      conversations.value = conversations.value.map(c => {
+
+      conversations.value = conversations.value.map((c) => {
         if (c.convId === convId) {
           return {
             ...c,
@@ -565,7 +574,7 @@ export const useSessionStore = defineStore('session', () => {
 
     const clientMsgId = crypto.randomUUID()
     const timestamp = Date.now()
-    
+
     // Optimistic insert
     const tempMessage: MessageRow = {
       userUuid,
@@ -615,7 +624,9 @@ export const useSessionStore = defineStore('session', () => {
         }
       }
 
-      await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [confirmedMessage]))
+      await safeWrite(() =>
+        window.api.localdb.chat.upsertMessages(userUuid, convId, [confirmedMessage])
+      )
 
       const currentMessages = messagesByConversation.value[convId] ?? []
       messagesByConversation.value = {
@@ -624,18 +635,20 @@ export const useSessionStore = defineStore('session', () => {
       }
     } catch (error) {
       console.error('Failed to send message:', error)
-      
+
       const failedMessage: MessageRow = {
         ...tempMessage,
         status: -1
       }
-      
-      await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [failedMessage]))
-      
+
+      await safeWrite(() =>
+        window.api.localdb.chat.upsertMessages(userUuid, convId, [failedMessage])
+      )
+
       const list = messagesByConversation.value[convId] ?? []
       messagesByConversation.value = {
         ...messagesByConversation.value,
-        [convId]: list.map(m => m.clientMsgId === clientMsgId ? failedMessage : m)
+        [convId]: list.map((m) => (m.clientMsgId === clientMsgId ? failedMessage : m))
       }
     }
   }
@@ -649,7 +662,7 @@ export const useSessionStore = defineStore('session', () => {
     if (!activeConv) return
 
     const list = messagesByConversation.value[convId] ?? []
-    const failedMsg = list.find(m => m.clientMsgId === clientMsgId)
+    const failedMsg = list.find((m) => m.clientMsgId === clientMsgId)
     if (!failedMsg) return
 
     // 1. Update status to 0 (retrying/sending)
@@ -661,7 +674,7 @@ export const useSessionStore = defineStore('session', () => {
 
     messagesByConversation.value = {
       ...messagesByConversation.value,
-      [convId]: list.map(m => m.clientMsgId === clientMsgId ? retryingMsg : m)
+      [convId]: list.map((m) => (m.clientMsgId === clientMsgId ? retryingMsg : m))
     }
 
     const text = typeof retryingMsg.payload.text === 'string' ? retryingMsg.payload.text : ''
@@ -691,7 +704,9 @@ export const useSessionStore = defineStore('session', () => {
         }
       }
 
-      await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [confirmedMessage]))
+      await safeWrite(() =>
+        window.api.localdb.chat.upsertMessages(userUuid, convId, [confirmedMessage])
+      )
 
       const currentMessages = messagesByConversation.value[convId] ?? []
       messagesByConversation.value = {
@@ -705,12 +720,14 @@ export const useSessionStore = defineStore('session', () => {
         ...retryingMsg,
         status: -1
       }
-      await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [failedMessage]))
-      
+      await safeWrite(() =>
+        window.api.localdb.chat.upsertMessages(userUuid, convId, [failedMessage])
+      )
+
       const currentList = messagesByConversation.value[convId] ?? []
       messagesByConversation.value = {
         ...messagesByConversation.value,
-        [convId]: currentList.map(m => m.clientMsgId === clientMsgId ? failedMessage : m)
+        [convId]: currentList.map((m) => (m.clientMsgId === clientMsgId ? failedMessage : m))
       }
       toast.error('重发失败，请检查网络连接')
     }
@@ -730,7 +747,7 @@ export const useSessionStore = defineStore('session', () => {
       const currentMessages = messagesByConversation.value[convId] ?? []
 
       let recalledMessage: MessageRow | null = null
-      const nextMessages = currentMessages.map(m => {
+      const nextMessages = currentMessages.map((m) => {
         if (m.msgId === msgId) {
           recalledMessage = {
             ...m,
@@ -755,7 +772,9 @@ export const useSessionStore = defineStore('session', () => {
         [convId]: nextMessages
       }
 
-      await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [persistedMessage]))
+      await safeWrite(() =>
+        window.api.localdb.chat.upsertMessages(userUuid, convId, [persistedMessage])
+      )
     } catch (error) {
       console.error('Failed to recall message:', error)
     }
@@ -766,8 +785,10 @@ export const useSessionStore = defineStore('session', () => {
     try {
       const userUuid = currentUserUuid.value
       await httpClient.delete(`/api/v1/auth/conversations/${encodeURIComponent(convId)}`)
-      conversations.value = conversations.value.filter(c => c.convId !== convId)
-      await safeWrite(() => window.api.localdb.chat.replaceConversations(userUuid, conversations.value))
+      conversations.value = conversations.value.filter((c) => c.convId !== convId)
+      await safeWrite(() =>
+        window.api.localdb.chat.replaceConversations(userUuid, conversations.value)
+      )
       dropConversationRuntimeState(convId)
       await activateFallbackConversation(convId)
     } catch (e) {
@@ -782,7 +803,7 @@ export const useSessionStore = defineStore('session', () => {
         convId,
         ...settings
       })
-      conversations.value = conversations.value.map(c => {
+      conversations.value = conversations.value.map((c) => {
         if (c.convId === convId) {
           return {
             ...c,
@@ -809,38 +830,38 @@ export const useSessionStore = defineStore('session', () => {
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
       if (!AudioContextClass) return
       const ctx = new AudioContextClass()
-      
+
       const now = ctx.currentTime
-      
+
       // First tone (higher pitch)
       const osc1 = ctx.createOscillator()
       const gain1 = ctx.createGain()
       osc1.type = 'sine'
       osc1.frequency.setValueAtTime(880, now) // A5
       osc1.frequency.exponentialRampToValueAtTime(1200, now + 0.15)
-      
+
       gain1.gain.setValueAtTime(0.15, now)
       gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.4)
-      
+
       osc1.connect(gain1)
       gain1.connect(ctx.destination)
-      
+
       // Second tone (lower harmony, slightly delayed)
       const osc2 = ctx.createOscillator()
       const gain2 = ctx.createGain()
       osc2.type = 'sine'
       osc2.frequency.setValueAtTime(659.25, now + 0.05) // E5
       osc2.frequency.exponentialRampToValueAtTime(880, now + 0.2)
-      
+
       gain2.gain.setValueAtTime(0.1, now + 0.05)
       gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.45)
-      
+
       osc2.connect(gain2)
       gain2.connect(ctx.destination)
-      
+
       osc1.start(now)
       osc1.stop(now + 0.4)
-      
+
       osc2.start(now + 0.05)
       osc2.stop(now + 0.45)
     } catch (e) {
@@ -899,7 +920,7 @@ export const useSessionStore = defineStore('session', () => {
         [convId]: mergedMessages
       }
     } else {
-      conversations.value = conversations.value.map(c => {
+      conversations.value = conversations.value.map((c) => {
         if (c.convId === convId) {
           return {
             ...c,
@@ -921,23 +942,26 @@ export const useSessionStore = defineStore('session', () => {
 
       // Show toast if we are not actively viewing this conversation OR if the window is blurred
       if (activeConvId.value !== convId || !document.hasFocus()) {
-          const appStore = useAppStore()
-          if (appStore.toastEnabled) {
-            const friendStore = useFriendStore()
-            const groupStore = useGroupStore()
+        const appStore = useAppStore()
+        if (appStore.toastEnabled) {
+          const friendStore = useFriendStore()
+          const groupStore = useGroupStore()
 
-            let senderName = '未知用户'
-          const friend = friendStore.friends.find(f => f.peerUuid === item.fromUuid)
+          let senderName = '未知用户'
+          const friend = friendStore.friends.find((f) => f.peerUuid === item.fromUuid)
           if (friend) {
-            senderName = (friend.payload.remark as string) || (friend.payload.nickname as string) || item.fromUuid
+            senderName =
+              (friend.payload.remark as string) ||
+              (friend.payload.nickname as string) ||
+              item.fromUuid
           } else {
-            const member = groupStore.activeMembers.find(m => m.userUuid === item.fromUuid)
+            const member = groupStore.activeMembers.find((m) => m.userUuid === item.fromUuid)
             if (member) {
               senderName = member.nickname || item.fromUuid
             }
           }
 
-          const conv = conversations.value.find(c => c.convId === convId)
+          const conv = conversations.value.find((c) => c.convId === convId)
           const isGroup = conv?.payload.convType === 2
           const preview = mapped.payload.text || '发送了一条消息'
 
@@ -976,13 +1000,46 @@ export const useSessionStore = defineStore('session', () => {
     const convId = notice.convId
     const msgId = notice.msgId
 
-    let messages = messagesByConversation.value[convId] ?? []
-    if (messages.length === 0) {
-      messages = await safeRead(() => window.api.localdb.chat.getMessages(userUuid, convId, undefined, 100), [])
+    if (!convId || !msgId) {
+      return
     }
 
-    const target = messages.find(m => m.msgId === msgId)
+    let messages = messagesByConversation.value[convId] ?? []
+    if (messages.length === 0) {
+      messages = await safeRead(
+        () => window.api.localdb.chat.getMessages(userUuid, convId, undefined, 100),
+        []
+      )
+    }
+
+    const target = messages.find((m) => m.msgId === msgId)
     if (!target) {
+      try {
+        const response = await httpClient.post('/api/v1/auth/messages/get-by-ids', {
+          convId,
+          msgIds: [msgId]
+        })
+        const data = (response.data.data ?? {}) as GetMessagesByIdsData
+        const recalledRows = (data.messages ?? []).map((item: any) =>
+          mapMsgItemToRow(userUuid, item)
+        )
+        if (recalledRows.length === 0) {
+          return
+        }
+
+        await safeWrite(() =>
+          window.api.localdb.chat.upsertMessages(userUuid, convId, recalledRows)
+        )
+        const runtimeMessages = messagesByConversation.value[convId]
+        if (runtimeMessages) {
+          messagesByConversation.value = {
+            ...messagesByConversation.value,
+            [convId]: upsertMessages(runtimeMessages, recalledRows)
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to repair recalled message from server', error)
+      }
       return
     }
 
@@ -995,12 +1052,14 @@ export const useSessionStore = defineStore('session', () => {
       }
     }
 
-    await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, [recalledMessage]))
+    await safeWrite(() =>
+      window.api.localdb.chat.upsertMessages(userUuid, convId, [recalledMessage])
+    )
 
     if (messagesByConversation.value[convId]) {
       messagesByConversation.value = {
         ...messagesByConversation.value,
-        [convId]: messagesByConversation.value[convId].map(m => {
+        [convId]: messagesByConversation.value[convId].map((m) => {
           if (m.msgId === msgId) {
             return recalledMessage
           }
@@ -1012,18 +1071,14 @@ export const useSessionStore = defineStore('session', () => {
 
   async function handleIncomingMarkRead(userUuid: string, notice: any): Promise<void> {
     const convId = notice.convId
-    conversations.value = conversations.value.map(c => {
-      if (c.convId === convId) {
-        return {
-          ...c,
-          payload: {
-            ...c.payload,
-            unread: 0
-          }
-        }
-      }
-      return c
-    })
+    const readSeq = Number(notice.readSeq) || 0
+    if (!convId || readSeq <= 0) {
+      return
+    }
+
+    // 同账号其他设备的已读通知只携带 readSeq，不能据此断定本端没有更新的未读消息。
+    // 重新拉取服务端会话派生状态，避免把 readSeq 之后到达的消息错误清零。
+    await syncConversationsFromServer(userUuid)
   }
 
   // 对端已读回执（MSG_READ_RECEIPT）：单调推进 convId 的对端已读位点。
@@ -1046,7 +1101,7 @@ export const useSessionStore = defineStore('session', () => {
   }
 
   function updateConversationPreview(convId: string, previewText: string, timestamp: number) {
-    conversations.value = conversations.value.map(c => {
+    conversations.value = conversations.value.map((c) => {
       if (c.convId === convId) {
         return {
           ...c,
@@ -1068,12 +1123,12 @@ export const useSessionStore = defineStore('session', () => {
 
     if (convType === 2) {
       const groupStore = useGroupStore()
-      const group = groupStore.groups.find(g => g.groupUuid === targetUuid)
+      const group = groupStore.groups.find((g) => g.groupUuid === targetUuid)
       if (group) return group.name
       return getString(row.payload, 'title', `群聊 (${targetUuid.substring(0, 4)})`)
     } else {
       const friendStore = useFriendStore()
-      const friend = friendStore.friends.find(f => f.peerUuid === targetUuid)
+      const friend = friendStore.friends.find((f) => f.peerUuid === targetUuid)
       if (friend) {
         const remark = String(friend.payload.remark || '')
         const nickname = String(friend.payload.nickname || '')
@@ -1089,11 +1144,11 @@ export const useSessionStore = defineStore('session', () => {
 
     if (convType === 2) {
       const groupStore = useGroupStore()
-      const group = groupStore.groups.find(g => g.groupUuid === targetUuid)
+      const group = groupStore.groups.find((g) => g.groupUuid === targetUuid)
       return group?.avatar || ''
     } else {
       const friendStore = useFriendStore()
-      const friend = friendStore.friends.find(f => f.peerUuid === targetUuid)
+      const friend = friendStore.friends.find((f) => f.peerUuid === targetUuid)
       return String(friend?.payload?.avatar || '')
     }
   }
@@ -1140,7 +1195,7 @@ export const useSessionStore = defineStore('session', () => {
       convId = buildP2PConversationId(userUuid, normalizedTargetUuid)
     }
 
-    const found = conversations.value.find(c => c.convId === convId)
+    const found = conversations.value.find((c) => c.convId === convId)
     if (!found) {
       const newConv: ConversationRow = {
         userUuid,
