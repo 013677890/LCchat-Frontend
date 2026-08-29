@@ -10,7 +10,8 @@ import type {
   JsonObject,
   MessageRow,
   ProfileRow,
-  SyncStateRow
+  SyncStateRow,
+  UpsertMessagesResult
 } from '../../shared/types/localdb'
 
 type PayloadRow = {
@@ -72,12 +73,7 @@ function normalizeCursor(cursor?: number): number | null {
   return nextCursor > 0 ? nextCursor : null
 }
 
-function upsertSyncState(
-  userUuid: string,
-  domain: string,
-  lastVersion: number,
-  cursor = ''
-): void {
+function upsertSyncState(userUuid: string, domain: string, lastVersion: number, cursor = ''): void {
   const db = getLocalDB()
   db.prepare(
     `INSERT INTO sync_state(user_uuid, domain, last_version, cursor, updated_at)
@@ -598,12 +594,31 @@ export function registerLocalDBHandlers(ipcMain: IpcMain): void {
     IPC_CHANNELS.localdb.chat.upsertMessages,
     (userUuid: string, convId: string, items: MessageRow[]) => {
       const db = getLocalDB()
-      const upsertMessages = db.transaction((rows: MessageRow[]) => {
+      const upsertMessages = db.transaction((rows: MessageRow[]): UpsertMessagesResult => {
+        const findLogicalMessageStmt = db.prepare(
+          `SELECT 1
+           FROM messages
+           WHERE user_uuid = @user_uuid
+             AND conv_id = @conv_id
+             AND (
+               msg_id = @msg_id
+               OR (@client_msg_id IS NOT NULL AND client_msg_id = @client_msg_id)
+               OR (@seq IS NOT NULL AND @seq > 0 AND seq = @seq)
+             )
+           LIMIT 1`
+        )
         const deleteClientDuplicateStmt = db.prepare(
           `DELETE FROM messages
            WHERE user_uuid = ?
              AND conv_id = ?
              AND client_msg_id = ?
+           AND msg_id <> ?`
+        )
+        const deleteSeqDuplicateStmt = db.prepare(
+          `DELETE FROM messages
+           WHERE user_uuid = ?
+             AND conv_id = ?
+             AND seq = ?
              AND msg_id <> ?`
         )
         const stmt = db.prepare(
@@ -634,25 +649,38 @@ export function registerLocalDBHandlers(ipcMain: IpcMain): void {
              status = excluded.status`
         )
 
+        const insertedMsgIds: string[] = []
         for (const item of rows) {
-          if (item.clientMsgId) {
-            deleteClientDuplicateStmt.run(userUuid, convId, item.clientMsgId, item.msgId)
-          }
-
-          stmt.run({
+          const params = {
             user_uuid: userUuid,
             conv_id: convId,
             msg_id: item.msgId,
             client_msg_id: item.clientMsgId ?? null,
-            seq: item.seq ?? null,
+            seq: item.seq ?? null
+          }
+          const existed = findLogicalMessageStmt.get(params) !== undefined
+
+          if (item.clientMsgId) {
+            deleteClientDuplicateStmt.run(userUuid, convId, item.clientMsgId, item.msgId)
+          }
+          if (item.seq && item.seq > 0) {
+            deleteSeqDuplicateStmt.run(userUuid, convId, item.seq, item.msgId)
+          }
+
+          stmt.run({
+            ...params,
             send_time: item.sendTime,
             payload_json: serializePayload(item.payload),
             status: item.status
           })
+          if (!existed) {
+            insertedMsgIds.push(item.msgId)
+          }
         }
+        return { insertedMsgIds }
       })
 
-      upsertMessages(items)
+      return upsertMessages(items)
     }
   )
 

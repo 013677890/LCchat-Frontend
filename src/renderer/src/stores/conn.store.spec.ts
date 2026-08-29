@@ -151,8 +151,10 @@ describe('conn.store', () => {
       muteAll: false
     }
 
+    const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
     const connStore = useConnStore()
     connStore.connect()
+    expect(consoleLogSpy.mock.calls.flat().join(' ')).not.toContain('access-token')
 
     const socket = FakeWebSocket.instances[0] as FakeWebSocket | undefined
     expect(socket).toBeTruthy()

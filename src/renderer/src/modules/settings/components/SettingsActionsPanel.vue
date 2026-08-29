@@ -60,6 +60,18 @@ function triggerTestChime() {
   }
 }
 
+function handleSoundToggle(enabled: boolean) {
+  appStore.setSoundEnabled(enabled)
+  
+  if (enabled) {
+    // 播放测试音效确认开关已生效
+    triggerTestChime()
+    setTimeout(() => {
+      emit('securityClearFeedback')
+    }, 100)
+  }
+}
+
 const props = defineProps<{
   hasSelectedBlacklist: boolean
   selectedBlacklistLabel: string
@@ -166,7 +178,7 @@ function getLastSeenText(value: string): string {
               <input
                 type="checkbox"
                 :checked="appStore.soundEnabled"
-                @change="appStore.setSoundEnabled(($event.target as HTMLInputElement).checked)"
+                @change="handleSoundToggle(($event.target as HTMLInputElement).checked)"
               />
               <span class="slider round"></span>
             </label>
@@ -273,8 +285,12 @@ function getLastSeenText(value: string): string {
 
 .settings-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 20px;
+}
+
+.settings-cell {
+  min-height: 280px;
 }
 
 .settings-cell--security,
@@ -340,16 +356,18 @@ function getLastSeenText(value: string): string {
   opacity: 0.5;
 }
 
-.action-btn--danger {
-  color: #fff;
-  background: var(--c-danger);
-  box-shadow: 0 2px 6px rgba(245, 63, 63, 0.3);
+.action-btn--delete-account {
+  background: linear-gradient(135deg, #DC2626 0%, #991B1B 100%);
+  color: #FFFFFF;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.4);
+  border: 2px solid #B91C1C;
 }
 
-.action-btn--danger:hover:not(:disabled) {
-  background: #d43b3b;
+.action-btn--delete-account:hover:not(:disabled) {
+  background: linear-gradient(135deg, #B91C1C 0%, #7F1D1D 100%);
   transform: translateY(-2px);
-  box-shadow: 0 4px 10px rgba(245, 63, 63, 0.4);
+  box-shadow: 0 6px 18px rgba(220, 38, 38, 0.5);
 }
 
 .action-btn--ghost {

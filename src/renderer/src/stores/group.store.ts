@@ -44,7 +44,12 @@ function toFiniteNumber(value: number | string | undefined): number {
   return Number.isFinite(normalized) ? normalized : 0
 }
 
-function hasNextPage(page: number, pageSize: number, total: number | string, itemCount: number): boolean {
+function hasNextPage(
+  page: number,
+  pageSize: number,
+  total: number | string,
+  itemCount: number
+): boolean {
   const totalCount = toFiniteNumber(total)
   if (totalCount > 0) {
     return page * pageSize < totalCount
@@ -80,10 +85,10 @@ export const useGroupStore = defineStore('group', () => {
     try {
       const response = await fetchGroupList()
       groups.value = response.data.groups || []
-      
+
       // If we have an active group, refresh its data too
       if (activeGroup.value) {
-        const found = groups.value.find(g => g.groupUuid === activeGroup.value?.groupUuid)
+        const found = groups.value.find((g) => g.groupUuid === activeGroup.value?.groupUuid)
         if (found) {
           activeGroup.value = found
         } else {
@@ -178,6 +183,9 @@ export const useGroupStore = defineStore('group', () => {
   async function updateNotice(groupUuid: string, notice: string) {
     await apiUpdateGroupNotice(groupUuid, { notice })
     await syncGroups()
+    groups.value = groups.value.map((group) =>
+      group.groupUuid === groupUuid ? { ...group, notice } : group
+    )
     if (activeGroup.value?.groupUuid === groupUuid) {
       activeGroup.value = {
         ...activeGroup.value,
@@ -222,7 +230,12 @@ export const useGroupStore = defineStore('group', () => {
     await syncGroups()
   }
 
-  async function reviewRequest(groupUuid: string, applyId: string | number, action: number, remark = '') {
+  async function reviewRequest(
+    groupUuid: string,
+    applyId: string | number,
+    action: number,
+    remark = ''
+  ) {
     await apiReviewJoinGroup(groupUuid, applyId, { action, remark })
     await syncJoinRequests()
     await syncMembers(groupUuid)

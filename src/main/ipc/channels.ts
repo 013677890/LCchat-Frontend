@@ -7,6 +7,9 @@ export const IPC_CHANNELS = {
   device: {
     getId: 'device:get-id'
   },
+  clipboard: {
+    writeText: 'clipboard:write-text'
+  },
   localdb: {
     init: 'localdb:init',
     profile: {

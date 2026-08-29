@@ -1,7 +1,12 @@
 import { computed, ref, shallowRef } from 'vue'
 import { defineStore } from 'pinia'
 import { toast } from 'vue-sonner'
-import type { ConversationRow, JsonObject, MessageRow } from '../../../shared/types/localdb'
+import type {
+  ConversationRow,
+  JsonObject,
+  MessageRow,
+  UpsertMessagesResult
+} from '../../../shared/types/localdb'
 import { httpClient } from '../shared/http/client'
 import { useFriendStore } from './friend.store'
 import { useGroupStore } from './group.store'
@@ -197,16 +202,21 @@ function sortConversations(list: ConversationRow[]): ConversationRow[] {
   })
 }
 
+function isSameLogicalMessage(current: MessageRow, next: MessageRow): boolean {
+  if (current.msgId === next.msgId) {
+    return true
+  }
+  if (current.clientMsgId && current.clientMsgId === next.clientMsgId) {
+    return true
+  }
+  return Boolean(current.seq && next.seq && current.seq === next.seq)
+}
+
 function upsertMessages(currentRows: MessageRow[], nextRows: MessageRow[]): MessageRow[] {
   const merged = [...currentRows]
 
   for (const nextRow of nextRows) {
-    const existingIndex = merged.findIndex((row) => {
-      if (row.msgId === nextRow.msgId) {
-        return true
-      }
-      return Boolean(row.clientMsgId && row.clientMsgId === nextRow.clientMsgId)
-    })
+    const existingIndex = merged.findIndex((row) => isSameLogicalMessage(row, nextRow))
 
     if (existingIndex >= 0) {
       merged[existingIndex] = nextRow
@@ -247,13 +257,13 @@ export const useSessionStore = defineStore('session', () => {
     }
   }
 
-  async function safeWrite(runner: () => Promise<void>): Promise<void> {
+  async function safeWrite<T>(runner: () => Promise<T>): Promise<T | null> {
     try {
-      await runner()
-      return
+      return await runner()
     } catch (error) {
       localDBAvailable.value = false
       console.warn('localdb write failed, fallback to memory state', error)
+      return null
     }
   }
 
@@ -896,10 +906,16 @@ export const useSessionStore = defineStore('session', () => {
       }
     }
 
+    const existedInMemory = knownMessages.some((message) => isSameLogicalMessage(message, mapped))
     const rowsToPersist = upsertMessages(pulledRows, [mapped])
     const mergedMessages = upsertMessages(knownMessages, rowsToPersist)
 
-    await safeWrite(() => window.api.localdb.chat.upsertMessages(userUuid, convId, rowsToPersist))
+    const persistResult = await safeWrite<UpsertMessagesResult>(() =>
+      window.api.localdb.chat.upsertMessages(userUuid, convId, rowsToPersist)
+    )
+    const inserted = persistResult
+      ? persistResult.insertedMsgIds.includes(mapped.msgId)
+      : !existedInMemory
 
     if (!conversations.value.some((conversation) => conversation.convId === convId)) {
       await syncConversationsFromServer(userUuid)
@@ -911,7 +927,7 @@ export const useSessionStore = defineStore('session', () => {
         [convId]: mergedMessages
       }
 
-      if (mapped.seq) {
+      if (inserted && mapped.seq) {
         await markRead(convId, mapped.seq)
       }
     } else if (messagesByConversation.value[convId]) {
@@ -919,7 +935,7 @@ export const useSessionStore = defineStore('session', () => {
         ...messagesByConversation.value,
         [convId]: mergedMessages
       }
-    } else {
+    } else if (inserted) {
       conversations.value = conversations.value.map((c) => {
         if (c.convId === convId) {
           return {
@@ -934,10 +950,12 @@ export const useSessionStore = defineStore('session', () => {
       })
     }
 
-    updateConversationPreview(convId, mapped.payload.text as string, mapped.sendTime)
+    if (inserted) {
+      updateConversationPreview(convId, mapped.payload.text as string, mapped.sendTime)
+    }
 
     // Play notification sound and show toast for incoming messages from others
-    if (item.fromUuid !== userUuid) {
+    if (inserted && item.fromUuid !== userUuid) {
       playNotificationSound()
 
       // Show toast if we are not actively viewing this conversation OR if the window is blurred

@@ -34,6 +34,7 @@ import SkeletonLoader from '../../../shared/components/SkeletonLoader.vue'
 import { normalizeErrorMessage } from '../../../shared/utils/error'
 import { avatarInitial, avatarPaletteFromId } from '../../../shared/utils/avatar'
 import { appConfirm, appPrompt } from '../../../shared/composables/useConfirm'
+import { writeTextToClipboard } from '../../../shared/utils/clipboard'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -102,12 +103,16 @@ onMounted(async () => {
 })
 
 // Sync online statuses when friends load
-watch(() => friends.value, (newFriends) => {
-  if (newFriends && newFriends.length > 0) {
-    const uuids = newFriends.map(f => f.peerUuid)
-    presenceStore.syncBatch(uuids)
-  }
-}, { immediate: true })
+watch(
+  () => friends.value,
+  (newFriends) => {
+    if (newFriends && newFriends.length > 0) {
+      const uuids = newFriends.map((f) => f.peerUuid)
+      presenceStore.syncBatch(uuids)
+    }
+  },
+  { immediate: true }
+)
 
 // Reset selection when changing category tab
 function handleTabChange(tab: 'friends' | 'applies' | 'groups' | 'blacklist') {
@@ -123,16 +128,25 @@ function handleTabChange(tab: 'friends' | 'applies' | 'groups' | 'blacklist') {
   isEditingMyNickname.value = false
 }
 
+function handleApplySubTabChange(tab: 'inbox' | 'sent') {
+  applySubTab.value = tab
+  selectedApplyId.value = null
+}
+
 // Copy UUID Helper
-function copyToClipboard(text: string) {
+async function copyToClipboard(text: string) {
   if (!text) return
-  navigator.clipboard.writeText(text)
-  copiedId.value = text
-  isCopied.value = true
-  setTimeout(() => {
-    isCopied.value = false
-    copiedId.value = ''
-  }, 2000)
+  try {
+    await writeTextToClipboard(text)
+    copiedId.value = text
+    isCopied.value = true
+    setTimeout(() => {
+      isCopied.value = false
+      copiedId.value = ''
+    }, 2000)
+  } catch {
+    toast.error('复制失败，请尝试手动复制')
+  }
 }
 
 // 无头像图时的首字色块：按 UUID 稳定着色，与聊天/会话列表保持一致
@@ -143,28 +157,28 @@ function avatarBlockStyle(id: string): Record<string, string> {
 
 // Active computed selections
 const selectedFriend = computed(() => {
-  return friends.value.find(f => f.peerUuid === selectedFriendId.value) || null
+  return friends.value.find((f) => f.peerUuid === selectedFriendId.value) || null
 })
 
 const selectedApply = computed(() => {
   if (selectedApplyId.value === null) return null
   const pool = applySubTab.value === 'inbox' ? applyInbox.value : sentApplies.value
-  return pool.find(a => a.applyId === selectedApplyId.value) || null
+  return pool.find((a) => a.applyId === selectedApplyId.value) || null
 })
 
 const selectedGroup = computed(() => {
-  return groups.value.find(g => g.groupUuid === selectedGroupId.value) || null
+  return groups.value.find((g) => g.groupUuid === selectedGroupId.value) || null
 })
 
 const selectedBlacklistedUser = computed(() => {
-  return blacklistItems.value.find(b => b.peerUuid === selectedBlacklistId.value) || null
+  return blacklistItems.value.find((b) => b.peerUuid === selectedBlacklistId.value) || null
 })
 
 // Mapped search filtering
 const filteredFriends = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return friends.value
-  return friends.value.filter(f => {
+  return friends.value.filter((f) => {
     const remark = String(f.payload.remark || '').toLowerCase()
     const nickname = String(f.payload.nickname || '').toLowerCase()
     const uuid = f.peerUuid.toLowerCase()
@@ -177,7 +191,7 @@ const filteredApplies = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   const pool = applySubTab.value === 'inbox' ? applyInbox.value : sentApplies.value
   if (!q) return pool
-  return pool.filter(a => {
+  return pool.filter((a) => {
     const nick = String(a.payload.applicantNickname || a.payload.targetNickname || '').toLowerCase()
     const uuid = String(a.payload.applicantUuid || a.payload.targetUuid || '').toLowerCase()
     const reason = String(a.payload.reason || '').toLowerCase()
@@ -188,7 +202,7 @@ const filteredApplies = computed(() => {
 const filteredGroups = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return groups.value
-  return groups.value.filter(g => {
+  return groups.value.filter((g) => {
     const name = g.name.toLowerCase()
     const uuid = g.groupUuid.toLowerCase()
     const notice = String(g.notice || '').toLowerCase()
@@ -199,7 +213,7 @@ const filteredGroups = computed(() => {
 const filteredBlacklist = computed(() => {
   const q = searchQuery.value.trim().toLowerCase()
   if (!q) return blacklistItems.value
-  return blacklistItems.value.filter(b => {
+  return blacklistItems.value.filter((b) => {
     const nickname = String(b.payload.nickname || '').toLowerCase()
     const uuid = b.peerUuid.toLowerCase()
     return nickname.includes(q) || uuid.includes(q)
@@ -210,7 +224,11 @@ const filteredBlacklist = computed(() => {
 async function saveFriendRemark() {
   if (!selectedFriendId.value) return
   try {
-    await friendStore.updateFriendRemark(authStore.userUuid, selectedFriendId.value, remarkEditVal.value)
+    await friendStore.updateFriendRemark(
+      authStore.userUuid,
+      selectedFriendId.value,
+      remarkEditVal.value
+    )
     isEditingRemark.value = false
     toast.success('好友备注已更新')
   } catch (error) {
@@ -291,7 +309,12 @@ async function startChat(uuid: string, convType: number) {
 async function handleApplyRequest(action: 1 | 2) {
   if (!selectedApplyId.value || !authStore.userUuid) return
   try {
-    await applyStore.handleApplyAction(authStore.userUuid, selectedApplyId.value, action, applyRemarks.value)
+    await applyStore.handleApplyAction(
+      authStore.userUuid,
+      selectedApplyId.value,
+      action,
+      applyRemarks.value
+    )
     applyRemarks.value = ''
     // Refresh friend lists if approved
     if (action === 1) {
@@ -330,9 +353,9 @@ async function loadGroupDetails(groupUuid: string) {
   isEditingNotice.value = false
   isEditingMyNickname.value = false
   await groupStore.selectGroup(groupUuid)
-  
+
   // Find current member card nickname
-  const me = groupStore.activeMembers.find(m => m.userUuid === authStore.userUuid)
+  const me = groupStore.activeMembers.find((m) => m.userUuid === authStore.userUuid)
   myGroupNickname.value = me?.groupNickname || ''
 
   // Sync pending join requests if user is admin or owner
@@ -344,7 +367,7 @@ async function loadGroupDetails(groupUuid: string) {
 const isAdminOrOwnerOfGroup = computed(() => {
   if (!selectedGroup.value) return false
   const isOwner = selectedGroup.value.ownerUuid === authStore.userUuid
-  const me = groupStore.activeMembers.find(m => m.userUuid === authStore.userUuid)
+  const me = groupStore.activeMembers.find((m) => m.userUuid === authStore.userUuid)
   const isAdmin = me && me.role === 1
   return isOwner || isAdmin
 })
@@ -453,7 +476,6 @@ async function handleRemoveFromBlacklist() {
     toast.error('操作失败，请重试')
   }
 }
-
 </script>
 
 <template>
@@ -517,14 +539,14 @@ async function handleRemoveFromBlacklist() {
           <button
             class="apply-tab"
             :class="{ 'apply-tab--active': applySubTab === 'inbox' }"
-            @click="applySubTab = 'inbox'; selectedApplyId = null"
+            @click="handleApplySubTabChange('inbox')"
           >
             收到的申请
           </button>
           <button
             class="apply-tab"
             :class="{ 'apply-tab--active': applySubTab === 'sent' }"
-            @click="applySubTab = 'sent'; selectedApplyId = null"
+            @click="handleApplySubTabChange('sent')"
           >
             发出的申请
           </button>
@@ -554,9 +576,7 @@ async function handleRemoveFromBlacklist() {
           <SkeletonLoader type="contact" :count="4" />
         </template>
         <template v-else-if="activeTab === 'friends'">
-          <div v-if="filteredFriends.length === 0" class="no-items">
-            没有匹配的好友
-          </div>
+          <div v-if="filteredFriends.length === 0" class="no-items">没有匹配的好友</div>
           <button
             v-for="friend in filteredFriends"
             :key="friend.peerUuid"
@@ -576,7 +596,9 @@ async function handleRemoveFromBlacklist() {
                 class="card-avatar-placeholder"
                 :style="avatarBlockStyle(friend.peerUuid)"
               >
-                {{ avatarInitial(String(friend.payload.remark || friend.payload.nickname || '友')) }}
+                {{
+                  avatarInitial(String(friend.payload.remark || friend.payload.nickname || '友'))
+                }}
               </div>
               <span
                 class="presence-dot"
@@ -585,17 +607,19 @@ async function handleRemoveFromBlacklist() {
             </div>
             <div class="card-meta">
               <div class="card-title-row">
-                <span class="card-title">{{ friend.payload.remark || friend.payload.nickname || friend.peerUuid }}</span>
-                <span v-if="friend.payload.groupTag" class="tag-pill">{{ friend.payload.groupTag }}</span>
+                <span class="card-title">{{
+                  friend.payload.remark || friend.payload.nickname || friend.peerUuid
+                }}</span>
+                <span v-if="friend.payload.groupTag" class="tag-pill">{{
+                  friend.payload.groupTag
+                }}</span>
               </div>
               <p class="card-desc">{{ friend.payload.signature || '这个人很懒，什么都没写' }}</p>
             </div>
           </button>
         </template>
         <template v-else-if="activeTab === 'applies'">
-          <div v-if="filteredApplies.length === 0" class="no-items">
-            暂无申请记录
-          </div>
+          <div v-if="filteredApplies.length === 0" class="no-items">暂无申请记录</div>
           <button
             v-for="apply in filteredApplies"
             :key="apply.applyId"
@@ -613,15 +637,25 @@ async function handleRemoveFromBlacklist() {
               <div
                 v-else
                 class="card-avatar-placeholder"
-                :style="avatarBlockStyle(String(apply.payload.applicantUuid || apply.payload.targetUuid || apply.applyId))"
+                :style="
+                  avatarBlockStyle(
+                    String(apply.payload.applicantUuid || apply.payload.targetUuid || apply.applyId)
+                  )
+                "
               >
-                {{ avatarInitial(String(apply.payload.applicantNickname || apply.payload.targetNickname || '申')) }}
+                {{
+                  avatarInitial(
+                    String(apply.payload.applicantNickname || apply.payload.targetNickname || '申')
+                  )
+                }}
               </div>
             </div>
             <div class="card-meta">
               <div class="card-title-row">
                 <span class="card-title">
-                  {{ apply.payload.applicantNickname || apply.payload.targetNickname || '用户申请' }}
+                  {{
+                    apply.payload.applicantNickname || apply.payload.targetNickname || '用户申请'
+                  }}
                 </span>
                 <span
                   class="status-badge"
@@ -639,9 +673,7 @@ async function handleRemoveFromBlacklist() {
           </button>
         </template>
         <template v-else-if="activeTab === 'groups'">
-          <div v-if="filteredGroups.length === 0" class="no-items">
-            没有匹配的群聊
-          </div>
+          <div v-if="filteredGroups.length === 0" class="no-items">没有匹配的群聊</div>
           <button
             v-for="group in filteredGroups"
             :key="group.groupUuid"
@@ -650,12 +682,7 @@ async function handleRemoveFromBlacklist() {
             @click="loadGroupDetails(group.groupUuid)"
           >
             <div class="card-avatar-wrapper">
-              <img
-                v-if="group.avatar"
-                :src="group.avatar"
-                class="card-avatar"
-                alt="Group Avatar"
-              />
+              <img v-if="group.avatar" :src="group.avatar" class="card-avatar" alt="Group Avatar" />
               <div
                 v-else
                 class="card-avatar-placeholder"
@@ -674,9 +701,7 @@ async function handleRemoveFromBlacklist() {
           </button>
         </template>
         <template v-else-if="activeTab === 'blacklist'">
-          <div v-if="filteredBlacklist.length === 0" class="no-items">
-            黑名单为空
-          </div>
+          <div v-if="filteredBlacklist.length === 0" class="no-items">黑名单为空</div>
           <button
             v-for="blackItem in filteredBlacklist"
             :key="blackItem.peerUuid"
@@ -701,7 +726,9 @@ async function handleRemoveFromBlacklist() {
             </div>
             <div class="card-meta">
               <div class="card-title-row">
-                <span class="card-title">{{ blackItem.payload.nickname || blackItem.peerUuid }}</span>
+                <span class="card-title">{{
+                  blackItem.payload.nickname || blackItem.peerUuid
+                }}</span>
               </div>
               <p class="card-desc text-rose-500/70">已被您拉黑并屏蔽消息</p>
             </div>
@@ -746,18 +773,33 @@ async function handleRemoveFromBlacklist() {
                 class="profile-avatar-placeholder"
                 :style="avatarBlockStyle(selectedFriend.peerUuid)"
               >
-                {{ avatarInitial(String(selectedFriend.payload.remark || selectedFriend.payload.nickname || '友')) }}
+                {{
+                  avatarInitial(
+                    String(selectedFriend.payload.remark || selectedFriend.payload.nickname || '友')
+                  )
+                }}
               </div>
               <span
                 class="status-ring"
-                :class="{ 'status-ring--online': statusByUserUuid[selectedFriend.peerUuid]?.isOnline }"
+                :class="{
+                  'status-ring--online': statusByUserUuid[selectedFriend.peerUuid]?.isOnline
+                }"
               />
             </div>
-            
+
             <div class="profile-names">
-              <h2>{{ selectedFriend.payload.remark || selectedFriend.payload.nickname || '神秘好友' }}</h2>
-              <p v-if="selectedFriend.payload.remark" class="original-nick">昵称: {{ selectedFriend.payload.nickname }}</p>
-              <div class="presence-tag" :class="{ 'presence-tag--online': statusByUserUuid[selectedFriend.peerUuid]?.isOnline }">
+              <h2>
+                {{ selectedFriend.payload.remark || selectedFriend.payload.nickname || '神秘好友' }}
+              </h2>
+              <p v-if="selectedFriend.payload.remark" class="original-nick">
+                昵称: {{ selectedFriend.payload.nickname }}
+              </p>
+              <div
+                class="presence-tag"
+                :class="{
+                  'presence-tag--online': statusByUserUuid[selectedFriend.peerUuid]?.isOnline
+                }"
+              >
                 {{ statusByUserUuid[selectedFriend.peerUuid]?.isOnline ? '当前在线' : '离线/隐身' }}
               </div>
             </div>
@@ -775,7 +817,11 @@ async function handleRemoveFromBlacklist() {
                     title="复制账号"
                     @click="copyToClipboard(selectedFriend.peerUuid)"
                   >
-                    <Check v-if="isCopied && copiedId === selectedFriend.peerUuid" :size="14" class="text-emerald-500" />
+                    <Check
+                      v-if="isCopied && copiedId === selectedFriend.peerUuid"
+                      :size="14"
+                      class="text-emerald-500"
+                    />
                     <Copy v-else :size="14" />
                   </button>
                 </div>
@@ -783,14 +829,18 @@ async function handleRemoveFromBlacklist() {
 
               <div class="info-item">
                 <span class="info-label">个性签名</span>
-                <p class="signature-text">"{{ selectedFriend.payload.signature || '这家伙什么也没写。' }}"</p>
+                <p class="signature-text">
+                  "{{ selectedFriend.payload.signature || '这家伙什么也没写。' }}"
+                </p>
               </div>
 
               <!-- Inline Edits Remark -->
               <div class="info-item border-t border-white/5 pt-4">
                 <span class="info-label">好友备注</span>
                 <div v-if="!isEditingRemark" class="edit-display">
-                  <span class="value-text">{{ selectedFriend.payload.remark || '(未设置备注)' }}</span>
+                  <span class="value-text">{{
+                    selectedFriend.payload.remark || '(未设置备注)'
+                  }}</span>
                   <button class="btn-text-edit" @click="startEditRemark">
                     <Edit3 :size="14" />
                     修改
@@ -815,7 +865,9 @@ async function handleRemoveFromBlacklist() {
               <div class="info-item">
                 <span class="info-label">关系分组标签</span>
                 <div v-if="!isEditingTag" class="edit-display">
-                  <span class="value-text">{{ selectedFriend.payload.groupTag || '(未分组)' }}</span>
+                  <span class="value-text">{{
+                    selectedFriend.payload.groupTag || '(未分组)'
+                  }}</span>
                   <button class="btn-text-edit" @click="startEditTag">
                     <Edit3 :size="14" />
                     分组
@@ -846,8 +898,17 @@ async function handleRemoveFromBlacklist() {
                 </div>
               </div>
 
-              <div class="info-item flex justify-between items-center text-xs text-[var(--c-text-muted)] border-t border-white/5 pt-4">
-                <span>添加时间: {{ new Date(selectedFriend.payload.createdAt as number || Date.now()).toLocaleDateString() }}</span>
+              <div
+                class="info-item flex justify-between items-center text-xs text-[var(--c-text-muted)] border-t border-white/5 pt-4"
+              >
+                <span
+                  >添加时间:
+                  {{
+                    new Date(
+                      (selectedFriend.payload.createdAt as number) || Date.now()
+                    ).toLocaleDateString()
+                  }}</span
+                >
                 <span>来源: {{ selectedFriend.payload.source || '搜索查找' }}</span>
               </div>
             </div>
@@ -884,7 +945,7 @@ async function handleRemoveFromBlacklist() {
                 {{ avatarInitial(selectedGroup.name) }}
               </div>
             </div>
-            
+
             <div class="profile-names">
               <h2>{{ selectedGroup.name }}</h2>
               <div class="presence-tag presence-tag--group">
@@ -904,7 +965,11 @@ async function handleRemoveFromBlacklist() {
                     title="复制群UUID"
                     @click="copyToClipboard(selectedGroup.groupUuid)"
                   >
-                    <Check v-if="isCopied && copiedId === selectedGroup.groupUuid" :size="14" class="text-emerald-500" />
+                    <Check
+                      v-if="isCopied && copiedId === selectedGroup.groupUuid"
+                      :size="14"
+                      class="text-emerald-500"
+                    />
                     <Copy v-else :size="14" />
                   </button>
                 </div>
@@ -914,7 +979,9 @@ async function handleRemoveFromBlacklist() {
               <div class="info-item border-t border-white/5 pt-4">
                 <span class="info-label">群公告</span>
                 <div v-if="!isEditingNotice" class="edit-display flex-col items-start gap-2">
-                  <p class="notice-block scrollbar-thin">{{ selectedGroup.notice || '当前没有任何群公告' }}</p>
+                  <p class="notice-block scrollbar-thin">
+                    {{ selectedGroup.notice || '当前没有任何群公告' }}
+                  </p>
                   <button
                     v-if="isAdminOrOwnerOfGroup"
                     class="btn-text-edit mt-1 self-end"
@@ -942,7 +1009,9 @@ async function handleRemoveFromBlacklist() {
               <div class="info-item border-t border-white/5 pt-4">
                 <span class="info-label">我的群名片 (昵称)</span>
                 <div v-if="!isEditingMyNickname" class="edit-display">
-                  <span class="value-text">{{ myGroupNickname || '(未设置名片，显示用户昵称)' }}</span>
+                  <span class="value-text">{{
+                    myGroupNickname || '(未设置名片，显示用户昵称)'
+                  }}</span>
                   <button class="btn-text-edit" @click="isEditingMyNickname = true">
                     <Edit3 :size="14" />
                     修改名片
@@ -964,7 +1033,9 @@ async function handleRemoveFromBlacklist() {
               </div>
 
               <!-- Settings indicators -->
-              <div class="info-item flex gap-4 text-xs text-[var(--c-text-muted)] border-t border-white/5 pt-4">
+              <div
+                class="info-item flex gap-4 text-xs text-[var(--c-text-muted)] border-t border-white/5 pt-4"
+              >
                 <span class="flex items-center gap-1">
                   <VolumeX v-if="selectedGroup.muteAll" :size="14" class="text-rose-500" />
                   <Volume2 v-else :size="14" class="text-emerald-500" />
@@ -983,15 +1054,15 @@ async function handleRemoveFromBlacklist() {
                 <MessageSquare :size="18" />
                 进入群聊讨论
               </button>
-              <button 
+              <button
                 v-if="isAdminOrOwnerOfGroup"
                 class="btn-chat-primary bg-emerald-600/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-600/20 relative"
                 @click="openGroupJoinRequestsModal"
               >
                 <ShieldCheck :size="18" />
                 加群申请审批
-                <span 
-                  v-if="(groupStore.pendingRequestsCount[selectedGroupId] || 0) > 0" 
+                <span
+                  v-if="(groupStore.pendingRequestsCount[selectedGroupId] || 0) > 0"
                   class="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full animate-pulse shadow-md"
                 >
                   {{ groupStore.pendingRequestsCount[selectedGroupId] || 0 }}
@@ -1015,24 +1086,58 @@ async function handleRemoveFromBlacklist() {
             <div class="avatar-glowing-ring">
               <img
                 v-if="selectedApply.payload.applicantAvatar || selectedApply.payload.targetAvatar"
-                :src="(selectedApply.payload.applicantAvatar || selectedApply.payload.targetAvatar) as string"
+                :src="
+                  (selectedApply.payload.applicantAvatar ||
+                    selectedApply.payload.targetAvatar) as string
+                "
                 class="profile-avatar"
                 alt="Avatar"
               />
               <div
                 v-else
                 class="profile-avatar-placeholder"
-                :style="avatarBlockStyle(String(selectedApply.payload.applicantUuid || selectedApply.payload.targetUuid || selectedApply.applyId))"
+                :style="
+                  avatarBlockStyle(
+                    String(
+                      selectedApply.payload.applicantUuid ||
+                        selectedApply.payload.targetUuid ||
+                        selectedApply.applyId
+                    )
+                  )
+                "
               >
-                {{ avatarInitial(String(selectedApply.payload.applicantNickname || selectedApply.payload.targetNickname || '申')) }}
+                {{
+                  avatarInitial(
+                    String(
+                      selectedApply.payload.applicantNickname ||
+                        selectedApply.payload.targetNickname ||
+                        '申'
+                    )
+                  )
+                }}
               </div>
             </div>
-            
+
             <div class="profile-names">
-              <h2>{{ selectedApply.payload.applicantNickname || selectedApply.payload.targetNickname || '好友关系申请' }}</h2>
+              <h2>
+                {{
+                  selectedApply.payload.applicantNickname ||
+                  selectedApply.payload.targetNickname ||
+                  '好友关系申请'
+                }}
+              </h2>
               <p class="original-nick">申请ID: #{{ selectedApply.applyId }}</p>
-              <div class="presence-tag" :class="{ 'presence-tag--online': selectedApply.status === 0 }">
-                {{ selectedApply.status === 0 ? '待我处理审批' : selectedApply.status === 1 ? '已同意添加' : '已拒绝' }}
+              <div
+                class="presence-tag"
+                :class="{ 'presence-tag--online': selectedApply.status === 0 }"
+              >
+                {{
+                  selectedApply.status === 0
+                    ? '待我处理审批'
+                    : selectedApply.status === 1
+                      ? '已同意添加'
+                      : '已拒绝'
+                }}
               </div>
             </div>
           </div>
@@ -1050,9 +1155,23 @@ async function handleRemoveFromBlacklist() {
                   <button
                     class="btn-icon"
                     title="复制账号"
-                    @click="copyToClipboard((selectedApply.payload.applicantUuid || selectedApply.payload.targetUuid || '') as string)"
+                    @click="
+                      copyToClipboard(
+                        (selectedApply.payload.applicantUuid ||
+                          selectedApply.payload.targetUuid ||
+                          '') as string
+                      )
+                    "
                   >
-                    <Check v-if="isCopied && (copiedId === selectedApply.payload.applicantUuid || copiedId === selectedApply.payload.targetUuid)" :size="14" class="text-emerald-500" />
+                    <Check
+                      v-if="
+                        isCopied &&
+                        (copiedId === selectedApply.payload.applicantUuid ||
+                          copiedId === selectedApply.payload.targetUuid)
+                      "
+                      :size="14"
+                      class="text-emerald-500"
+                    />
                     <Copy v-else :size="14" />
                   </button>
                 </div>
@@ -1071,7 +1190,10 @@ async function handleRemoveFromBlacklist() {
               </div>
 
               <!-- Decision Box (If Inbox and Pending) -->
-              <div v-if="selectedApply.status === 0 && applySubTab === 'inbox'" class="approval-form border-t border-white/5 pt-4">
+              <div
+                v-if="selectedApply.status === 0 && applySubTab === 'inbox'"
+                class="approval-form border-t border-white/5 pt-4"
+              >
                 <span class="info-label">设置好友备注 (可选)</span>
                 <input
                   v-model="applyRemarks"
@@ -1093,7 +1215,10 @@ async function handleRemoveFromBlacklist() {
               </div>
 
               <!-- If Outbox and Pending/Rejected -->
-              <div v-else-if="applySubTab === 'sent' && selectedApply.status !== 1" class="approval-form border-t border-white/5 pt-4 text-center">
+              <div
+                v-else-if="applySubTab === 'sent' && selectedApply.status !== 1"
+                class="approval-form border-t border-white/5 pt-4 text-center"
+              >
                 <p class="text-xs text-[var(--c-text-muted)] mb-4">
                   该申请当前正等待对方同意，如果申请超时或被拒绝，您可以重新发起申请。
                 </p>
@@ -1104,7 +1229,9 @@ async function handleRemoveFromBlacklist() {
               </div>
 
               <!-- Static timestamp -->
-              <div class="info-item text-xs text-[var(--c-text-muted)] border-t border-white/5 pt-4">
+              <div
+                class="info-item text-xs text-[var(--c-text-muted)] border-t border-white/5 pt-4"
+              >
                 申请时间: {{ new Date(selectedApply.updatedAt || Date.now()).toLocaleString() }}
               </div>
             </div>
@@ -1129,10 +1256,13 @@ async function handleRemoveFromBlacklist() {
                 {{ avatarInitial(String(selectedBlacklistedUser.payload.nickname || '黑')) }}
               </div>
             </div>
-            
+
             <div class="profile-names">
               <h2>{{ selectedBlacklistedUser.payload.nickname || '已拉黑账号' }}</h2>
-              <p class="original-nick">被禁时间: {{ new Date(selectedBlacklistedUser.updatedAt || Date.now()).toLocaleString() }}</p>
+              <p class="original-nick">
+                被禁时间:
+                {{ new Date(selectedBlacklistedUser.updatedAt || Date.now()).toLocaleString() }}
+              </p>
             </div>
           </div>
 
@@ -1147,7 +1277,11 @@ async function handleRemoveFromBlacklist() {
                     title="复制账号"
                     @click="copyToClipboard(selectedBlacklistedUser.peerUuid)"
                   >
-                    <Check v-if="isCopied && copiedId === selectedBlacklistedUser.peerUuid" :size="14" class="text-emerald-500" />
+                    <Check
+                      v-if="isCopied && copiedId === selectedBlacklistedUser.peerUuid"
+                      :size="14"
+                      class="text-emerald-500"
+                    />
                     <Copy v-else :size="14" />
                   </button>
                 </div>
@@ -1162,7 +1296,10 @@ async function handleRemoveFromBlacklist() {
             </div>
 
             <div class="profile-actions">
-              <button class="btn-chat-primary justify-center bg-rose-600/20 text-rose-400 border border-rose-500/30 hover:bg-rose-600/30" @click="handleRemoveFromBlacklist">
+              <button
+                class="btn-chat-primary justify-center bg-rose-600/20 text-rose-400 border border-rose-500/30 hover:bg-rose-600/30"
+                @click="handleRemoveFromBlacklist"
+              >
                 <ShieldCheck :size="16" />
                 移出黑名单
               </button>
@@ -1173,24 +1310,42 @@ async function handleRemoveFromBlacklist() {
     </div>
 
     <!-- Group Join Requests Modal -->
-    <div v-if="showGroupJoinRequestsModal && selectedGroup" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div class="bg-[var(--c-bg-panel)] backdrop-blur-md rounded-3xl w-[500px] max-h-[600px] flex flex-col shadow-2xl overflow-hidden border border-white/10 animate-slideUp">
+    <div
+      v-if="showGroupJoinRequestsModal && selectedGroup"
+      class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+    >
+      <div
+        class="bg-[var(--c-bg-panel)] backdrop-blur-md rounded-3xl w-[500px] max-h-[600px] flex flex-col shadow-2xl overflow-hidden border border-white/10 animate-slideUp"
+      >
         <header class="p-5 border-b border-white/5 flex items-center justify-between">
           <div class="flex items-center gap-2">
             <h4 class="font-bold text-white text-lg">加群申请审批</h4>
-            <span class="text-xs text-[var(--c-text-muted)] font-medium">({{ selectedGroup.name }})</span>
+            <span class="text-xs text-[var(--c-text-muted)] font-medium"
+              >({{ selectedGroup.name }})</span
+            >
           </div>
-          <button class="text-[var(--c-text-muted)] hover:text-white cursor-pointer" @click="showGroupJoinRequestsModal = false">✕</button>
+          <button
+            class="text-[var(--c-text-muted)] hover:text-white cursor-pointer"
+            @click="showGroupJoinRequestsModal = false"
+          >
+            ✕
+          </button>
         </header>
-        
+
         <div class="flex-1 p-5 overflow-y-auto space-y-4">
-          <p v-if="!groupStore.joinRequests[selectedGroup?.groupUuid || ''] || (groupStore.joinRequests[selectedGroup?.groupUuid || '']?.length ?? 0) === 0" class="text-center text-[var(--c-text-muted)] text-sm py-12">
+          <p
+            v-if="
+              !groupStore.joinRequests[selectedGroup?.groupUuid || ''] ||
+              (groupStore.joinRequests[selectedGroup?.groupUuid || '']?.length ?? 0) === 0
+            "
+            class="text-center text-[var(--c-text-muted)] text-sm py-12"
+          >
             暂无待处理的加群申请
           </p>
-          
-          <div 
-            v-for="req in groupStore.joinRequests[selectedGroup?.groupUuid || ''] || []" 
-            :key="req.applyId" 
+
+          <div
+            v-for="req in groupStore.joinRequests[selectedGroup?.groupUuid || ''] || []"
+            :key="req.applyId"
             class="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-3"
           >
             <div class="flex items-center justify-between">
@@ -1203,35 +1358,46 @@ async function handleRemoveFromBlacklist() {
                 </div>
                 <div class="text-left">
                   <h5 class="text-white font-bold text-sm">{{ req.nickname }}</h5>
-                  <p class="text-[10px] text-[var(--c-text-muted)]">UUID: {{ req.applicantUuid }}</p>
+                  <p class="text-[10px] text-[var(--c-text-muted)]">
+                    UUID: {{ req.applicantUuid }}
+                  </p>
                 </div>
               </div>
               <span class="text-[10px] text-[var(--c-text-muted)] font-medium">
-                {{ new Date(req.createdAt).toLocaleString('zh-CN', { hour: '2-digit', minute: '2-digit', month: '2-digit', day: '2-digit' }) }}
+                {{
+                  new Date(req.createdAt).toLocaleString('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    month: '2-digit',
+                    day: '2-digit'
+                  })
+                }}
               </span>
             </div>
-            
-            <div class="bg-white/5 p-3 rounded-xl border border-white/5 text-xs text-neutral-300 text-left">
+
+            <div
+              class="bg-white/5 p-3 rounded-xl border border-white/5 text-xs text-neutral-300 text-left"
+            >
               <span class="font-bold text-[var(--c-text-muted)] block mb-1">申请理由：</span>
               {{ req.reason || '未填写申请理由' }}
             </div>
 
             <!-- Review remark and action buttons -->
             <div class="flex items-center gap-3 pt-1">
-              <input 
-                v-model="groupReviewRemark" 
-                type="text" 
-                placeholder="填写审批备注 (可选)..." 
+              <input
+                v-model="groupReviewRemark"
+                type="text"
+                placeholder="填写审批备注 (可选)..."
                 class="flex-1 text-xs px-3 py-2 border border-white/10 rounded-xl outline-none focus:border-emerald-500 bg-white/5 text-white"
               />
               <div class="flex gap-2">
-                <button 
+                <button
                   class="px-3.5 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/30 rounded-xl text-xs font-bold transition cursor-pointer"
                   @click="handleGroupReviewRequest(req.applyId, 2)"
                 >
                   拒绝
                 </button>
-                <button 
+                <button
                   class="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-sm transition cursor-pointer"
                   @click="handleGroupReviewRequest(req.applyId, 1)"
                 >
@@ -1241,9 +1407,14 @@ async function handleRemoveFromBlacklist() {
             </div>
           </div>
         </div>
-        
+
         <footer class="p-5 border-t border-white/5 flex justify-end bg-black/10">
-          <button class="px-5 py-2 bg-white/10 hover:bg-white/15 text-white rounded-xl text-xs font-bold cursor-pointer" @click="showGroupJoinRequestsModal = false">关闭</button>
+          <button
+            class="px-5 py-2 bg-white/10 hover:bg-white/15 text-white rounded-xl text-xs font-bold cursor-pointer"
+            @click="showGroupJoinRequestsModal = false"
+          >
+            关闭
+          </button>
         </footer>
       </div>
     </div>
@@ -1262,8 +1433,12 @@ async function handleRemoveFromBlacklist() {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* 1. Category Panel (Leftmost) */
@@ -1717,8 +1892,12 @@ async function handleRemoveFromBlacklist() {
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Canvas Details Inner */
@@ -1743,8 +1922,14 @@ async function handleRemoveFromBlacklist() {
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Profile Hero */
@@ -2072,7 +2257,7 @@ async function handleRemoveFromBlacklist() {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  background: linear-gradient(135deg, #00E583 0%, #00C670 100%);
+  background: linear-gradient(135deg, #00e583 0%, #00c670 100%);
   border: none;
   color: #fff;
   font-weight: 700;

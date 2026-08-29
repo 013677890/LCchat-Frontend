@@ -22,6 +22,9 @@ const api: BridgeApi = {
   device: {
     getId: () => ipcRenderer.invoke(IPC_CHANNELS.device.getId)
   },
+  clipboard: {
+    writeText: (text: string) => ipcRenderer.invoke(IPC_CHANNELS.clipboard.writeText, text)
+  },
   localdb: {
     init: () => ipcRenderer.invoke(IPC_CHANNELS.localdb.init),
     profile: {

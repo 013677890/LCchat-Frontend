@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { buildQRCodeDataUrl } from '../../../shared/utils/qr-renderer'
+import { writeTextToClipboard } from '../../../shared/utils/clipboard'
 
 const props = defineProps<{
   qrCodeUrl: string
@@ -88,27 +89,8 @@ async function copyQRCodeUrl(): Promise<void> {
   clearLocalCopyFeedback()
 
   try {
-    if (navigator?.clipboard?.writeText) {
-      await navigator.clipboard.writeText(props.qrCodeUrl)
-      copyMessage.value = '二维码链接已复制。'
-      return
-    }
-
-    const textArea = document.createElement('textarea')
-    textArea.value = props.qrCodeUrl
-    textArea.style.position = 'fixed'
-    textArea.style.left = '-9999px'
-    document.body.appendChild(textArea)
-    textArea.focus()
-    textArea.select()
-    const copied = document.execCommand('copy')
-    document.body.removeChild(textArea)
-    if (copied) {
-      copyMessage.value = '二维码链接已复制。'
-      return
-    }
-
-    copyError.value = '复制失败，请手动复制。'
+    await writeTextToClipboard(props.qrCodeUrl)
+    copyMessage.value = '二维码链接已复制。'
   } catch (error) {
     copyError.value = error instanceof Error ? error.message : '复制失败，请手动复制。'
   }
@@ -264,9 +246,9 @@ async function exportQRCodeImage(): Promise<void> {
 
 .preview-wrap {
   margin-top: 20px;
-  border: 1px solid rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, #fafafa 0%, #f4f5f5 100%);
+  background: #ffffff;
   padding: 20px;
 }
 
@@ -275,12 +257,13 @@ async function exportQRCodeImage(): Promise<void> {
   aspect-ratio: 1;
   margin: 0 auto;
   border-radius: var(--radius-md);
-  background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
   display: grid;
   place-items: center;
   overflow: hidden;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  padding: 16px;
 }
 
 .preview-box img {

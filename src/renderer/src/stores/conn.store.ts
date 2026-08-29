@@ -71,7 +71,7 @@ export const useConnStore = defineStore('conn', () => {
     status.value = status.value === 'reconnecting' ? 'reconnecting' : 'connecting'
 
     const url = getWsUrl()
-    console.log('[WS] Connecting to:', url)
+    console.log('[WS] Connecting')
 
     try {
       ws = new WebSocket(url)

@@ -19,14 +19,14 @@
   --c-bg-hover: rgba(0, 0, 0, 0.04);
 
   /* 边框颜色 */
-  --c-border: rgba(229, 232, 236, 0.6);
+  --c-border: rgba(229, 232, 236, 0.85);
   --c-border-strong: #d6dce3;
   --c-border-light: rgba(255, 255, 255, 0.2);
 
   /* 文本颜色 */
   --c-text-main: #1C1E23;
-  --c-text-sub: #5C6370;
-  --c-text-muted: #8B949E;
+  --c-text-sub: #4A525C;
+  --c-text-muted: #6B7280;
   --c-text-on-dark: #F0F6FC;
   --c-text-on-dark-muted: #8B949E;
 
@@ -45,11 +45,12 @@
   --space-8: 32px;
   --space-10: 40px;
 
-  /* 圆角：全面提升圆角尺寸，更贴合现代工业级设计 */
+  /* 圆角：优化尺寸提升信息密度 */
   --radius-sm: 8px;
   --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
   --radius-full: 9999px;
 
   /* 阴影效果：更柔和的多层阴影 */
@@ -182,4 +183,15 @@ a:hover {
 .slide-up-leave-to {
   opacity: 0;
   transform: translateY(10px);
+}
+
+/* 性能优化：减少动画设备负担 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

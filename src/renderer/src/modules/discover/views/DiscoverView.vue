@@ -18,6 +18,7 @@ import { resolveAssetUrl } from '../../../shared/utils/asset-url'
 import { buildQRCodeDataUrl } from '../../../shared/utils/qr-renderer'
 import { avatarInitial, avatarPaletteFromId } from '../../../shared/utils/avatar'
 import { openChatConversation } from '../navigation'
+import { writeTextToClipboard } from '../../../shared/utils/clipboard'
 import { toast } from 'vue-sonner'
 import {
   Search,
@@ -46,7 +47,7 @@ import {
   DialogOverlay,
   DialogContent,
   DialogTitle,
-  DialogClose,
+  DialogClose
 } from 'radix-vue'
 
 const route = useRoute()
@@ -122,6 +123,10 @@ function isFriend(uuid: string): boolean {
   return friendStore.friends.some((f) => f.peerUuid === uuid)
 }
 
+function isSelf(uuid: string): boolean {
+  return uuid === userUuid.value
+}
+
 function isBlacklisted(uuid: string): boolean {
   return blacklistStore.items.some((b) => b.peerUuid === uuid)
 }
@@ -178,13 +183,13 @@ async function handleSearch() {
       const response = await searchUsers({ keyword, page: 1, pageSize: 30 })
       const mapped = (response.data.items ?? []).map(mapUserResult)
       searchResultsUsers.value = mapped.filter((item) => item.uuid && item.uuid !== userUuid.value)
-      
+
       // Batch sync presence states for results
-      const uuids = searchResultsUsers.value.map(item => item.uuid)
+      const uuids = searchResultsUsers.value.map((item) => item.uuid)
       if (uuids.length > 0) {
         presenceStore.syncBatch(uuids)
       }
-      
+
       if (searchResultsUsers.value.length === 0) {
         toast.info('没有找到匹配的用户')
       }
@@ -276,7 +281,7 @@ async function handleDirectJoinGroup(groupUuid: string, groupName: string) {
     await groupStore.applyJoin(groupUuid)
     toast.success(`您已直接成功加入群组 "${groupName}"！`, { id: 'join-group' })
     await groupStore.syncGroups()
-    
+
     // Smooth navigation into Chat workspace
     setTimeout(async () => {
       try {
@@ -315,9 +320,11 @@ async function handleStartP2PChat(peerUuid: string) {
 async function copyQRCodeUrl() {
   if (!qrCode.value?.qrCode) return
   try {
-    await navigator.clipboard.writeText(qrCode.value.qrCode)
+    await writeTextToClipboard(qrCode.value.qrCode)
     localCopyFeedback.value = '链接已成功复制！'
-    setTimeout(() => { localCopyFeedback.value = '' }, 2500)
+    setTimeout(() => {
+      localCopyFeedback.value = ''
+    }, 2500)
     toast.success('二维码链接已复制到剪贴板')
   } catch (err) {
     toast.error('复制失败，请重试')
@@ -368,9 +375,13 @@ onMounted(() => {
 <template>
   <main class="flex-1 h-full min-h-0 overflow-hidden flex flex-col bg-[var(--c-bg-panel-soft)]">
     <!-- Header -->
-    <header class="w-full px-8 py-5 border-b border-[var(--c-border)] bg-[var(--c-bg-panel)] backdrop-blur-xl flex justify-between items-center z-10">
+    <header
+      class="w-full px-8 py-5 border-b border-[var(--c-border)] bg-[var(--c-bg-panel)] backdrop-blur-xl flex justify-between items-center z-10"
+    >
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-[var(--c-primary-soft)] grid place-items-center text-[var(--c-primary)] shadow-inner">
+        <div
+          class="w-10 h-10 rounded-xl bg-[var(--c-primary-soft)] grid place-items-center text-[var(--c-primary)] shadow-inner"
+        >
           <Sparkles :size="20" stroke-width="2.5" class="animate-pulse" />
         </div>
         <div>
@@ -383,18 +394,20 @@ onMounted(() => {
     <!-- Unified Workspace with 2 columns: Search Main (8cols) and My QR Sidebar (4cols) -->
     <div class="flex-1 min-h-0 overflow-y-auto">
       <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 p-8 max-w-7xl mx-auto w-full">
-        
         <!-- Left Main Column -->
         <section class="xl:col-span-8 flex flex-col gap-6">
-          
           <!-- Modern Tab Toggles -->
-          <div class="p-1.5 bg-white/70 dark:bg-zinc-900/50 backdrop-blur-md rounded-2xl border border-[var(--c-border)] flex gap-2">
+          <div
+            class="p-1.5 bg-white/70 dark:bg-zinc-900/50 backdrop-blur-md rounded-2xl border border-[var(--c-border)] flex gap-2"
+          >
             <button
               @click="activeTab = 'user'"
               class="flex-1 py-3 px-4 rounded-xl flex items-center justify-center gap-2.5 text-sm font-semibold transition-all duration-300"
-              :class="activeTab === 'user' 
-                ? 'bg-[var(--c-primary)] text-white shadow-lg shadow-[var(--c-primary-soft)] transform scale-[1.02]' 
-                : 'text-[var(--c-text-sub)] hover:text-[var(--c-text-main)] hover:bg-[var(--c-bg-panel-soft)]'"
+              :class="
+                activeTab === 'user'
+                  ? 'bg-[var(--c-primary)] text-white shadow-lg shadow-[var(--c-primary-soft)] transform scale-[1.02]'
+                  : 'text-[var(--c-text-sub)] hover:text-[var(--c-text-main)] hover:bg-[var(--c-bg-panel-soft)]'
+              "
             >
               <UserPlus :size="16" />
               查找用户
@@ -402,9 +415,11 @@ onMounted(() => {
             <button
               @click="activeTab = 'group'"
               class="flex-1 py-3 px-4 rounded-xl flex items-center justify-center gap-2.5 text-sm font-semibold transition-all duration-300"
-              :class="activeTab === 'group' 
-                ? 'bg-[var(--c-primary)] text-white shadow-lg shadow-[var(--c-primary-soft)] transform scale-[1.02]' 
-                : 'text-[var(--c-text-sub)] hover:text-[var(--c-text-main)] hover:bg-[var(--c-bg-panel-soft)]'"
+              :class="
+                activeTab === 'group'
+                  ? 'bg-[var(--c-primary)] text-white shadow-lg shadow-[var(--c-primary-soft)] transform scale-[1.02]'
+                  : 'text-[var(--c-text-sub)] hover:text-[var(--c-text-main)] hover:bg-[var(--c-bg-panel-soft)]'
+              "
             >
               <Users :size="16" />
               查找群组
@@ -412,9 +427,11 @@ onMounted(() => {
             <button
               @click="activeTab = 'scan'"
               class="flex-1 py-3 px-4 rounded-xl flex items-center justify-center gap-2.5 text-sm font-semibold transition-all duration-300"
-              :class="activeTab === 'scan' 
-                ? 'bg-[var(--c-primary)] text-white shadow-lg shadow-[var(--c-primary-soft)] transform scale-[1.02]' 
-                : 'text-[var(--c-text-sub)] hover:text-[var(--c-text-main)] hover:bg-[var(--c-bg-panel-soft)]'"
+              :class="
+                activeTab === 'scan'
+                  ? 'bg-[var(--c-primary)] text-white shadow-lg shadow-[var(--c-primary-soft)] transform scale-[1.02]'
+                  : 'text-[var(--c-text-sub)] hover:text-[var(--c-text-main)] hover:bg-[var(--c-bg-panel-soft)]'
+              "
             >
               <QrCode :size="16" />
               解析二维码
@@ -422,29 +439,37 @@ onMounted(() => {
           </div>
 
           <!-- Active tab search panel wrapper -->
-          <div class="bg-white/70 dark:bg-zinc-900/50 backdrop-blur-md rounded-3xl border border-[var(--c-border)] p-6 shadow-sm flex flex-col gap-6">
-            
+          <div
+            class="bg-white/70 dark:bg-zinc-900/50 backdrop-blur-md rounded-3xl border border-[var(--c-border)] p-6 shadow-sm flex flex-col gap-6"
+          >
             <!-- 1 & 2. Search Users / Groups Tab View -->
             <div v-if="activeTab === 'user' || activeTab === 'group'" class="flex flex-col gap-5">
               <h3 class="text-sm font-bold text-[var(--c-text-main)]">
                 {{ activeTab === 'user' ? '查找 LCChat 用户' : '探索 LCChat 群聊' }}
               </h3>
-              
+
               <div class="flex gap-3">
                 <div class="flex-1 relative">
-                  <Search class="absolute left-4 top-3.5 text-gray-400 w-4 h-4 pointer-events-none" />
-                  <input 
+                  <Search
+                    class="absolute left-4 top-3.5 text-gray-400 w-4 h-4 pointer-events-none"
+                  />
+                  <input
                     v-model="searchKeyword"
                     type="text"
-                    :placeholder="activeTab === 'user' ? '输入用户 UUID / 邮箱 / 昵称关键词...' : '输入群组 UUID / 名称关键词...'"
+                    :placeholder="
+                      activeTab === 'user'
+                        ? '输入用户 UUID / 邮箱 / 昵称关键词...'
+                        : '输入群组 UUID / 名称关键词...'
+                    "
                     @keyup.enter="handleSearch"
                     class="w-full pl-11 pr-4 py-3 bg-[var(--c-bg-panel-soft)] border border-[var(--c-border)] rounded-xl focus:bg-white focus:border-[var(--c-primary)] focus:ring-4 focus:ring-[var(--c-primary-soft)] transition-all outline-none text-sm text-[var(--c-text-main)]"
                   />
                 </div>
-                <button 
-                  @click="handleSearch" 
+                <button
+                  @click="handleSearch"
                   :disabled="searching || !searchKeyword.trim()"
-                  class="px-6 py-3 bg-[var(--c-primary)] hover:bg-[var(--c-primary-active)] text-white rounded-xl font-semibold text-sm transition-all shadow-md shadow-[var(--c-primary-soft)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                  class="px-6 py-3 bg-[var(--c-primary)] hover:bg-[var(--c-primary-active)] text-white rounded-xl font-semibold text-sm transition-all shadow-md shadow-[var(--c-primary-soft)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
                   <RefreshCw v-if="searching" :size="14" class="animate-spin" />
                   {{ searching ? '搜索中...' : '搜索' }}
                 </button>
@@ -455,21 +480,25 @@ onMounted(() => {
             <div v-else class="flex flex-col gap-5">
               <div>
                 <h3 class="text-sm font-bold text-[var(--c-text-main)]">解析二维码链接或 Token</h3>
-                <p class="text-xs text-[var(--c-text-sub)] mt-1">支持粘贴完整的 LCChat 二维码链接，或者直接粘贴提取出的安全解析 Token 进行精确定位。</p>
+                <p class="text-xs text-[var(--c-text-sub)] mt-1">
+                  支持粘贴完整的 LCChat 二维码链接，或者直接粘贴提取出的安全解析 Token
+                  进行精确定位。
+                </p>
               </div>
-              
+
               <div class="flex gap-3">
-                <input 
+                <input
                   v-model="qrInput"
                   type="text"
                   placeholder="粘贴二维码网址或 Token (例如: lcchat://profile?token=...)"
                   @keyup.enter="handleParseQRCode"
                   class="flex-1 px-4 py-3 bg-[var(--c-bg-panel-soft)] border border-[var(--c-border)] rounded-xl focus:bg-white focus:border-[var(--c-primary)] focus:ring-4 focus:ring-[var(--c-primary-soft)] transition-all outline-none text-sm text-[var(--c-text-main)]"
                 />
-                <button 
-                  @click="handleParseQRCode" 
+                <button
+                  @click="handleParseQRCode"
                   :disabled="parsingQr || !qrInput.trim()"
-                  class="px-6 py-3 bg-[var(--c-primary)] hover:bg-[var(--c-primary-active)] text-white rounded-xl font-semibold text-sm transition-all shadow-md shadow-[var(--c-primary-soft)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                  class="px-6 py-3 bg-[var(--c-primary)] hover:bg-[var(--c-primary-active)] text-white rounded-xl font-semibold text-sm transition-all shadow-md shadow-[var(--c-primary-soft)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
                   <RefreshCw v-if="parsingQr" :size="14" class="animate-spin" />
                   {{ parsingQr ? '解析中...' : '解析并查找' }}
                 </button>
@@ -479,27 +508,41 @@ onMounted(() => {
 
           <!-- Results Display Area -->
           <div class="flex flex-col gap-4">
-            
             <!-- Searching loading placeholder -->
-            <div v-if="searching || parsingQr" class="py-12 bg-white/40 rounded-3xl border border-[var(--c-border)] grid place-items-center">
+            <div
+              v-if="searching || parsingQr"
+              class="py-12 bg-white/40 rounded-3xl border border-[var(--c-border)] grid place-items-center"
+            >
               <div class="flex flex-col items-center gap-3">
                 <RefreshCw class="w-8 h-8 text-[var(--c-primary)] animate-spin" />
-                <p class="text-xs text-[var(--c-text-sub)] font-semibold animate-pulse">正在获取最新匹配结果...</p>
+                <p class="text-xs text-[var(--c-text-sub)] font-semibold animate-pulse">
+                  正在获取最新匹配结果...
+                </p>
               </div>
             </div>
 
             <template v-else>
               <!-- A. User Search Results List -->
-              <div v-if="activeTab === 'user' && searchResultsUsers.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div 
-                  v-for="user in searchResultsUsers" 
+              <div
+                v-if="activeTab === 'user' && searchResultsUsers.length > 0"
+                class="grid grid-cols-1 md:grid-cols-2 gap-4"
+              >
+                <div
+                  v-for="user in searchResultsUsers"
                   :key="user.uuid"
                   class="p-5 bg-white/80 dark:bg-zinc-900/60 rounded-3xl border border-[var(--c-border)] hover:border-emerald-200 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-between gap-4 group"
                 >
                   <div class="flex items-center gap-4 min-w-0">
                     <!-- Avatar with Pulse state -->
-                    <div class="w-12 h-12 rounded-2xl bg-gray-100 border border-[var(--c-border)] overflow-hidden relative flex-shrink-0">
-                      <img v-if="user.avatar" :src="user.avatar" alt="avatar" class="w-full h-full object-cover" />
+                    <div
+                      class="w-12 h-12 rounded-2xl bg-gray-100 border border-[var(--c-border)] overflow-hidden relative flex-shrink-0"
+                    >
+                      <img
+                        v-if="user.avatar"
+                        :src="user.avatar"
+                        alt="avatar"
+                        class="w-full h-full object-cover"
+                      />
                       <div
                         v-else
                         class="w-full h-full grid place-items-center font-bold text-lg"
@@ -507,9 +550,9 @@ onMounted(() => {
                       >
                         {{ avatarInitial(user.nickname || user.uuid) }}
                       </div>
-                      
+
                       <!-- Real-time Presence sync dot -->
-                      <span 
+                      <span
                         v-if="presenceStore.getStatus(user.uuid)?.isOnline"
                         class="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full pulse-indicator"
                       />
@@ -518,18 +561,35 @@ onMounted(() => {
                     <!-- User metadata details -->
                     <div class="min-w-0">
                       <div class="flex items-center gap-1.5">
-                        <strong class="text-sm font-bold text-[var(--c-text-main)] truncate block">{{ user.nickname || '未设定昵称' }}</strong>
-                        <span class="px-1.5 py-0.5 text-[9px] font-semibold bg-gray-100 dark:bg-zinc-800 text-[var(--c-text-sub)] rounded">UUID</span>
+                        <strong
+                          class="text-sm font-bold text-[var(--c-text-main)] truncate block"
+                          >{{ user.nickname || '未设定昵称' }}</strong
+                        >
+                        <span
+                          class="px-1.5 py-0.5 text-[9px] font-semibold bg-gray-100 dark:bg-zinc-800 text-[var(--c-text-sub)] rounded"
+                          >UUID</span
+                        >
                       </div>
-                      <p class="text-[10px] text-[var(--c-text-sub)] truncate select-all mt-0.5">{{ user.uuid }}</p>
-                      <p class="text-xs text-[var(--c-text-sub)] truncate mt-1.5 italic">“{{ user.signature }}”</p>
+                      <p class="text-[10px] text-[var(--c-text-sub)] truncate select-all mt-0.5">
+                        {{ user.uuid }}
+                      </p>
+                      <p class="text-xs text-[var(--c-text-sub)] truncate mt-1.5 italic">
+                        “{{ user.signature }}”
+                      </p>
                     </div>
                   </div>
 
                   <!-- Actions -->
                   <div class="flex-shrink-0">
+                    <span
+                      v-if="isSelf(user.uuid)"
+                      class="px-3 py-1.5 bg-gray-100 text-[var(--c-text-sub)] font-semibold text-xs rounded-xl flex items-center gap-1"
+                    >
+                      <UserCheck :size="12" />
+                      这是你自己
+                    </span>
                     <button
-                      v-if="isFriend(user.uuid)"
+                      v-else-if="isFriend(user.uuid)"
                       @click="handleStartP2PChat(user.uuid)"
                       class="px-4 py-2 bg-[var(--c-primary-soft)] hover:bg-[var(--c-primary)] hover:text-white text-[var(--c-primary)] font-bold text-xs rounded-xl transition-all flex items-center gap-1.5"
                     >
@@ -556,16 +616,26 @@ onMounted(() => {
               </div>
 
               <!-- B. Group Search Results List -->
-              <div v-else-if="activeTab === 'group' && searchResultsGroups.length > 0" class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div 
-                  v-for="group in searchResultsGroups" 
+              <div
+                v-else-if="activeTab === 'group' && searchResultsGroups.length > 0"
+                class="grid grid-cols-1 md:grid-cols-2 gap-4"
+              >
+                <div
+                  v-for="group in searchResultsGroups"
                   :key="group.groupUuid"
                   class="p-5 bg-white/80 dark:bg-zinc-900/60 rounded-3xl border border-[var(--c-border)] hover:border-emerald-200 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 flex items-center justify-between gap-4"
                 >
                   <div class="flex items-center gap-4 min-w-0">
                     <!-- Elegant characters fallback avatar -->
-                    <div class="w-12 h-12 rounded-2xl bg-gray-100 border border-[var(--c-border)] overflow-hidden flex-shrink-0">
-                      <img v-if="group.avatar" :src="resolveAssetUrl(group.avatar)" alt="group-avatar" class="w-full h-full object-cover" />
+                    <div
+                      class="w-12 h-12 rounded-2xl bg-gray-100 border border-[var(--c-border)] overflow-hidden flex-shrink-0"
+                    >
+                      <img
+                        v-if="group.avatar"
+                        :src="resolveAssetUrl(group.avatar)"
+                        alt="group-avatar"
+                        class="w-full h-full object-cover"
+                      />
                       <div
                         v-else
                         class="w-full h-full grid place-items-center font-bold text-lg"
@@ -577,19 +647,28 @@ onMounted(() => {
 
                     <div class="min-w-0">
                       <div class="flex items-center gap-2">
-                        <strong class="text-sm font-bold text-[var(--c-text-main)] truncate block">{{ group.name }}</strong>
+                        <strong
+                          class="text-sm font-bold text-[var(--c-text-main)] truncate block"
+                          >{{ group.name }}</strong
+                        >
                       </div>
-                      <p class="text-[10px] text-[var(--c-text-sub)] truncate select-all mt-0.5">{{ group.groupUuid }}</p>
-                      
+                      <p class="text-[10px] text-[var(--c-text-sub)] truncate select-all mt-0.5">
+                        {{ group.groupUuid }}
+                      </p>
+
                       <div class="flex items-center gap-2 mt-2">
-                        <span class="px-2 py-0.5 text-[10px] font-semibold bg-[var(--c-bg-panel-soft)] text-[var(--c-text-sub)] rounded-full border border-[var(--c-border)]">
+                        <span
+                          class="px-2 py-0.5 text-[10px] font-semibold bg-[var(--c-bg-panel-soft)] text-[var(--c-text-sub)] rounded-full border border-[var(--c-border)]"
+                        >
                           成员: {{ group.memberCount }} 人
                         </span>
-                        <span 
+                        <span
                           class="px-2 py-0.5 text-[10px] font-semibold rounded-full border"
-                          :class="group.addMode === 0 
-                            ? 'bg-emerald-50 text-emerald-600 border-emerald-100' 
-                            : 'bg-amber-50 text-amber-600 border-amber-100'"
+                          :class="
+                            group.addMode === 0
+                              ? 'bg-emerald-50 text-emerald-600 border-emerald-100'
+                              : 'bg-amber-50 text-amber-600 border-amber-100'
+                          "
                         >
                           {{ group.addMode === 0 ? '直接加入' : '需审批' }}
                         </span>
@@ -626,9 +705,18 @@ onMounted(() => {
 
               <!-- C. Scan QR Parse Profile Result -->
               <div v-else-if="activeTab === 'scan' && parsedUser" class="flex justify-center py-4">
-                <div class="max-w-md w-full p-6 bg-white/90 dark:bg-zinc-900/70 border border-[var(--c-border)] rounded-[32px] shadow-lg flex flex-col items-center text-center gap-5">
-                  <div class="w-20 h-20 rounded-[28px] border border-[var(--c-border)] overflow-hidden bg-gray-50 shadow-md relative">
-                    <img v-if="parsedUser.avatar" :src="parsedUser.avatar" alt="avatar" class="w-full h-full object-cover" />
+                <div
+                  class="max-w-md w-full p-6 bg-white/90 dark:bg-zinc-900/70 border border-[var(--c-border)] rounded-[32px] shadow-lg flex flex-col items-center text-center gap-5"
+                >
+                  <div
+                    class="w-20 h-20 rounded-[28px] border border-[var(--c-border)] overflow-hidden bg-gray-50 shadow-md relative"
+                  >
+                    <img
+                      v-if="parsedUser.avatar"
+                      :src="parsedUser.avatar"
+                      alt="avatar"
+                      class="w-full h-full object-cover"
+                    />
                     <div
                       v-else
                       class="w-full h-full grid place-items-center text-2xl font-bold"
@@ -636,24 +724,39 @@ onMounted(() => {
                     >
                       {{ avatarInitial(parsedUser.nickname || parsedUser.uuid) }}
                     </div>
-                    
-                    <span 
+
+                    <span
                       v-if="presenceStore.getStatus(parsedUser.uuid)?.isOnline"
                       class="absolute bottom-1 right-1 w-4.5 h-4.5 bg-emerald-500 border-2 border-white rounded-full pulse-indicator"
                     />
                   </div>
 
                   <div>
-                    <h4 class="text-base font-bold text-[var(--c-text-main)]">{{ parsedUser.nickname || '未设定昵称' }}</h4>
-                    <p class="text-xs text-[var(--c-text-sub)] mt-1 select-all font-mono">{{ parsedUser.uuid }}</p>
-                    <p class="text-xs text-[var(--c-text-sub)] mt-3 bg-[var(--c-bg-panel-soft)] px-4 py-2 rounded-2xl italic border border-[var(--c-border)] max-w-sm">
+                    <h4 class="text-base font-bold text-[var(--c-text-main)]">
+                      {{ parsedUser.nickname || '未设定昵称' }}
+                    </h4>
+                    <p class="text-xs text-[var(--c-text-sub)] mt-1 select-all font-mono">
+                      {{ parsedUser.uuid }}
+                    </p>
+                    <p
+                      class="text-xs text-[var(--c-text-sub)] mt-3 bg-[var(--c-bg-panel-soft)] px-4 py-2 rounded-2xl italic border border-[var(--c-border)] max-w-sm"
+                    >
                       “{{ parsedUser.signature }}”
                     </p>
                   </div>
 
-                  <div class="w-full border-t border-[var(--c-border)] pt-4 flex justify-center gap-4">
+                  <div
+                    class="w-full border-t border-[var(--c-border)] pt-4 flex justify-center gap-4"
+                  >
+                    <span
+                      v-if="isSelf(parsedUser.uuid)"
+                      class="px-4 py-2 bg-gray-100 text-[var(--c-text-sub)] font-semibold text-xs rounded-xl flex items-center gap-1"
+                    >
+                      <UserCheck :size="14" />
+                      这是你自己
+                    </span>
                     <button
-                      v-if="isFriend(parsedUser.uuid)"
+                      v-else-if="isFriend(parsedUser.uuid)"
                       @click="handleStartP2PChat(parsedUser.uuid)"
                       class="px-6 py-2.5 bg-[var(--c-primary-soft)] hover:bg-[var(--c-primary)] hover:text-white text-[var(--c-primary)] font-bold text-xs rounded-xl transition-all flex items-center gap-1.5"
                     >
@@ -669,7 +772,13 @@ onMounted(() => {
                     </span>
                     <button
                       v-else
-                      @click="openApplyModal('user', parsedUser.uuid, parsedUser.nickname || parsedUser.uuid)"
+                      @click="
+                        openApplyModal(
+                          'user',
+                          parsedUser.uuid,
+                          parsedUser.nickname || parsedUser.uuid
+                        )
+                      "
                       class="px-6 py-2.5 bg-[var(--c-primary)] hover:bg-[var(--c-primary-active)] text-white font-bold text-xs rounded-xl transition-all shadow-md shadow-[var(--c-primary-soft)] flex items-center gap-1.5"
                     >
                       <UserPlus :size="14" />
@@ -680,11 +789,16 @@ onMounted(() => {
               </div>
 
               <!-- D. Empty Results Default View -->
-              <div v-else-if="searchKeyword" class="py-16 bg-white/40 rounded-3xl border border-[var(--c-border)] grid place-items-center">
+              <div
+                v-else-if="searchKeyword"
+                class="py-16 bg-white/40 rounded-3xl border border-[var(--c-border)] grid place-items-center"
+              >
                 <div class="flex flex-col items-center text-center gap-3 max-w-xs">
                   <Info class="w-8 h-8 text-gray-400" />
                   <h4 class="text-sm font-bold text-[var(--c-text-main)]">未找到匹配项</h4>
-                  <p class="text-xs text-[var(--c-text-sub)]">请确保您的输入绝对正确。模糊搜索支持昵称或部分 UUID，精确搜索支持完整的 UUID。</p>
+                  <p class="text-xs text-[var(--c-text-sub)]">
+                    请确保您的输入绝对正确。模糊搜索支持昵称或部分 UUID，精确搜索支持完整的 UUID。
+                  </p>
                 </div>
               </div>
             </template>
@@ -693,7 +807,9 @@ onMounted(() => {
 
         <!-- Right Sidebar (My Personal QR Code business card) -->
         <section class="xl:col-span-4 flex flex-col gap-6">
-          <div class="bg-white/70 dark:bg-zinc-900/50 backdrop-blur-md rounded-3xl border border-[var(--c-border)] p-6 shadow-sm flex flex-col gap-5">
+          <div
+            class="bg-white/70 dark:bg-zinc-900/50 backdrop-blur-md rounded-3xl border border-[var(--c-border)] p-6 shadow-sm flex flex-col gap-5"
+          >
             <header class="flex justify-between items-center">
               <h3 class="text-sm font-bold text-[var(--c-text-main)]">我的名片码</h3>
               <button
@@ -705,17 +821,32 @@ onMounted(() => {
               </button>
             </header>
 
-            <p class="text-xs text-[var(--c-text-sub)] leading-normal">向其他用户提供您的二维码链接或 Token，即可轻松被发现并建立联系。</p>
-            
+            <p class="text-xs text-[var(--c-text-sub)] leading-normal">
+              向其他用户提供您的二维码链接或 Token，即可轻松被发现并建立联系。
+            </p>
+
             <!-- Business Card Layout -->
-            <div class="bg-gradient-to-b from-white to-[var(--c-bg-panel)] border border-[var(--c-border)] rounded-2xl p-5 flex flex-col items-center shadow-inner relative overflow-hidden group">
+            <div
+              class="bg-gradient-to-b from-white to-[var(--c-bg-panel)] border border-[var(--c-border)] rounded-2xl p-5 flex flex-col items-center shadow-inner relative overflow-hidden group"
+            >
               <!-- Grid background deco -->
-              <div class="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] pointer-events-none opacity-30" />
-              
+              <div
+                class="absolute inset-0 bg-grid-slate-100 [mask-image:linear-gradient(0deg,white,rgba(255,255,255,0.6))] pointer-events-none opacity-30"
+              />
+
               <!-- Personal Info Profile Header -->
-              <div class="flex items-center gap-3.5 w-full mb-4 z-10 border-b border-[var(--c-border)] pb-3">
-                <div class="w-10 h-10 rounded-xl bg-[var(--c-bg-panel-soft)] border border-[var(--c-border)] overflow-hidden">
-                  <img v-if="profile?.payload?.avatar" :src="resolveAssetUrl(profile.payload.avatar as string)" alt="my-avatar" class="w-full h-full object-cover" />
+              <div
+                class="flex items-center gap-3.5 w-full mb-4 z-10 border-b border-[var(--c-border)] pb-3"
+              >
+                <div
+                  class="w-10 h-10 rounded-xl bg-[var(--c-bg-panel-soft)] border border-[var(--c-border)] overflow-hidden"
+                >
+                  <img
+                    v-if="profile?.payload?.avatar"
+                    :src="resolveAssetUrl(profile.payload.avatar as string)"
+                    alt="my-avatar"
+                    class="w-full h-full object-cover"
+                  />
                   <div
                     v-else
                     class="w-full h-full grid place-items-center text-base font-bold"
@@ -728,22 +859,33 @@ onMounted(() => {
                   <strong class="text-xs font-bold text-[var(--c-text-main)] truncate block">
                     {{ profile?.payload?.nickname || '我的昵称' }}
                   </strong>
-                  <p class="text-[9px] text-[var(--c-text-sub)] truncate select-all font-mono mt-0.5">
+                  <p
+                    class="text-[9px] text-[var(--c-text-sub)] truncate select-all font-mono mt-0.5"
+                  >
                     {{ profile?.payload?.uuid || authStore.userUuid }}
                   </p>
                 </div>
               </div>
 
               <!-- QR Code Preview box -->
-              <div class="w-48 h-48 bg-white rounded-xl border border-[var(--c-border)] p-2 shadow-md relative overflow-hidden flex items-center justify-center z-10 group-hover:scale-[1.02] transition-transform duration-300">
-                <img v-if="qrImageUrl" :src="qrImageUrl" alt="my-qr" class="w-full h-full object-contain" />
+              <div
+                class="w-48 h-48 bg-white rounded-xl border border-[var(--c-border)] p-2 shadow-md relative overflow-hidden flex items-center justify-center z-10 group-hover:scale-[1.02] transition-transform duration-300"
+              >
+                <img
+                  v-if="qrImageUrl"
+                  :src="qrImageUrl"
+                  alt="my-qr"
+                  class="w-full h-full object-contain"
+                />
                 <div v-else class="text-center p-4">
                   <RefreshCw class="w-6 h-6 text-gray-300 animate-spin mx-auto mb-2" />
                   <p class="text-[10px] text-[var(--c-text-sub)]">名片未生成</p>
                 </div>
               </div>
 
-              <span class="text-[10px] text-[var(--c-text-sub)] text-center mt-3 z-10 font-medium">在 LCChat 中扫描以上二维码添加好友</span>
+              <span class="text-[10px] text-[var(--c-text-sub)] text-center mt-3 z-10 font-medium"
+                >在 LCChat 中扫描以上二维码添加好友</span
+              >
             </div>
 
             <!-- Actions list -->
@@ -767,10 +909,15 @@ onMounted(() => {
                 </button>
               </div>
 
-              <div class="bg-[var(--c-bg-panel-soft)] border border-[var(--c-border)] rounded-xl p-3 mt-1 flex flex-col gap-1.5 text-[10px]">
+              <div
+                class="bg-[var(--c-bg-panel-soft)] border border-[var(--c-border)] rounded-xl p-3 mt-1 flex flex-col gap-1.5 text-[10px]"
+              >
                 <div class="flex justify-between">
                   <span class="text-[var(--c-text-sub)]">Token</span>
-                  <span class="font-mono text-[var(--c-text-main)] font-semibold max-w-[120px] truncate select-all">{{ qrCode?.token || '-' }}</span>
+                  <span
+                    class="font-mono text-[var(--c-text-main)] font-semibold max-w-[120px] truncate select-all"
+                    >{{ qrCode?.token || '-' }}</span
+                  >
                 </div>
                 <div class="flex justify-between">
                   <span class="text-[var(--c-text-sub)]">过期时间</span>
@@ -780,23 +927,30 @@ onMounted(() => {
             </div>
           </div>
         </section>
-
       </div>
     </div>
 
     <!-- Elegant custom Radix-Vue apply modal dialog -->
     <DialogRoot :open="isApplyModalOpen" @update:open="isApplyModalOpen = $event">
       <DialogPortal>
-        <DialogOverlay class="bg-black/35 fixed inset-0 z-50 backdrop-blur-sm transition-all duration-300" />
-        <DialogContent class="fixed top-[50%] left-[50%] w-full max-w-[420px] translate-x-[-50%] translate-y-[-50%] rounded-[24px] bg-[var(--c-bg-panel-solid)] border border-white/20 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-50 outline-none backdrop-blur-md flex flex-col gap-4">
+        <DialogOverlay
+          class="bg-black/35 fixed inset-0 z-50 backdrop-blur-sm transition-all duration-300"
+        />
+        <DialogContent
+          class="fixed top-[50%] left-[50%] w-full max-w-[420px] translate-x-[-50%] translate-y-[-50%] rounded-[24px] bg-[var(--c-bg-panel-solid)] border border-white/20 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.15)] z-50 outline-none backdrop-blur-md flex flex-col gap-4"
+        >
           <DialogTitle class="text-sm font-bold text-[var(--c-text-main)] flex items-center gap-2">
             <Sparkles class="w-4 h-4 text-[var(--c-primary)]" />
             {{ applyModalType === 'user' ? '申请添加好友' : '申请加入群组' }}
           </DialogTitle>
-          
-          <div class="bg-[var(--c-bg-panel-soft)] p-3 rounded-xl border border-[var(--c-border)] flex items-center justify-between text-xs">
+
+          <div
+            class="bg-[var(--c-bg-panel-soft)] p-3 rounded-xl border border-[var(--c-border)] flex items-center justify-between text-xs"
+          >
             <span class="text-[var(--c-text-sub)]">目标对象</span>
-            <strong class="text-[var(--c-text-main)] truncate max-w-[200px]">{{ applyModalTargetName }}</strong>
+            <strong class="text-[var(--c-text-main)] truncate max-w-[200px]">{{
+              applyModalTargetName
+            }}</strong>
           </div>
 
           <div class="flex flex-col gap-2">
@@ -825,7 +979,9 @@ onMounted(() => {
 
           <div class="flex justify-end gap-2.5 mt-4 border-t border-[var(--c-border)] pt-4">
             <DialogClose as-child>
-              <button class="px-4 py-2 border border-[var(--c-border)] hover:bg-[var(--c-bg-panel-soft)] text-[var(--c-text-sub)] font-semibold text-xs rounded-xl transition-colors">
+              <button
+                class="px-4 py-2 border border-[var(--c-border)] hover:bg-[var(--c-bg-panel-soft)] text-[var(--c-text-sub)] font-semibold text-xs rounded-xl transition-colors"
+              >
                 取消
               </button>
             </DialogClose>

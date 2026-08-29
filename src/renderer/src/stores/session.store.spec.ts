@@ -22,7 +22,14 @@ const getConversationsMock = vi.fn().mockResolvedValue([])
 const upsertConversationsMock = vi.fn().mockResolvedValue(undefined)
 const replaceConversationsMock = vi.fn().mockResolvedValue(undefined)
 const getMessagesMock = vi.fn().mockResolvedValue([])
-const upsertMessagesMock = vi.fn().mockResolvedValue(undefined)
+const defaultUpsertMessages = async (
+  _userUuid: string,
+  _convId: string,
+  items: MessageRow[]
+): Promise<{ insertedMsgIds: string[] }> => ({
+  insertedMsgIds: items.map((item) => item.msgId)
+})
+const upsertMessagesMock = vi.fn().mockImplementation(defaultUpsertMessages)
 const getDraftMock = vi.fn().mockResolvedValue('')
 const saveDraftMock = vi.fn().mockResolvedValue(undefined)
 
@@ -84,7 +91,7 @@ describe('session.store message pull', () => {
     upsertConversationsMock.mockResolvedValue(undefined)
     replaceConversationsMock.mockResolvedValue(undefined)
     getMessagesMock.mockResolvedValue([])
-    upsertMessagesMock.mockResolvedValue(undefined)
+    upsertMessagesMock.mockImplementation(defaultUpsertMessages)
     getDraftMock.mockResolvedValue('')
     saveDraftMock.mockResolvedValue(undefined)
     httpPostMock.mockResolvedValue({
@@ -225,6 +232,42 @@ describe('session.store message pull', () => {
         expect.objectContaining({ msgId: 'msg-5', seq: 5 })
       ])
     )
+  })
+
+  it('persists a pushed message before suppressing duplicate UI side effects', async () => {
+    const existingMessage: MessageRow = {
+      userUuid: 'user-1',
+      convId: 'conv-1',
+      msgId: 'msg-1',
+      clientMsgId: 'client-1',
+      seq: 1,
+      sendTime: 1001,
+      payload: { text: 'hello-1', from: 'peer-1' },
+      status: 0
+    }
+    getMessagesMock.mockResolvedValueOnce([existingMessage])
+    upsertMessagesMock.mockResolvedValueOnce({ insertedMsgIds: [] })
+
+    const store = useSessionStore()
+    store.currentUserUuid = 'user-1'
+    store.conversations = [
+      {
+        userUuid: 'user-1',
+        convId: 'conv-1',
+        payload: { unread: 3, preview: 'hello-1' },
+        updatedAt: 1
+      }
+    ]
+
+    const ackSeq = await store.handleIncomingMessage('user-1', backendMsg(1))
+
+    expect(upsertMessagesMock).toHaveBeenCalledWith('user-1', 'conv-1', [
+      expect.objectContaining({ msgId: 'msg-1', seq: 1 })
+    ])
+    expect(store.conversations[0]?.payload.unread).toBe(3)
+    expect(store.conversations[0]?.payload.preview).toBe('hello-1')
+    expect(store.conversations[0]?.updatedAt).toBe(1)
+    expect(ackSeq).toBe(1)
   })
 
   it('merges optimistic send, websocket echo and http confirmation by clientMsgId', async () => {

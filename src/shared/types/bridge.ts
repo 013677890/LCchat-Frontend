@@ -7,7 +7,8 @@ import type {
   MessageRow,
   ProfileRow,
   SessionData,
-  SyncStateRow
+  SyncStateRow,
+  UpsertMessagesResult
 } from './localdb'
 
 export interface BridgeApi {
@@ -18,6 +19,9 @@ export interface BridgeApi {
   }
   device: {
     getId: () => Promise<string>
+  }
+  clipboard: {
+    writeText: (text: string) => Promise<void>
   }
   localdb: {
     init: () => Promise<void>
@@ -64,7 +68,11 @@ export interface BridgeApi {
         cursor?: number,
         limit?: number
       ) => Promise<MessageRow[]>
-      upsertMessages: (userUuid: string, convId: string, items: MessageRow[]) => Promise<void>
+      upsertMessages: (
+        userUuid: string,
+        convId: string,
+        items: MessageRow[]
+      ) => Promise<UpsertMessagesResult>
       saveDraft: (userUuid: string, convId: string, draft: string) => Promise<void>
       getDraft: (userUuid: string, convId: string) => Promise<string>
     }

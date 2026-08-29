@@ -4,7 +4,8 @@ import { useGroupStore } from './group.store'
 import {
   fetchJoinRequestPendingCount,
   fetchJoinRequests,
-  fetchMyJoinGroupApplications
+  fetchMyJoinGroupApplications,
+  updateGroupNotice
 } from '../modules/group/api'
 
 vi.mock('../modules/group/api', () => ({
@@ -40,6 +41,7 @@ vi.mock('../modules/group/api', () => ({
 const fetchJoinRequestsMock = vi.mocked(fetchJoinRequests)
 const fetchPendingCountMock = vi.mocked(fetchJoinRequestPendingCount)
 const fetchMyJoinApplicationsMock = vi.mocked(fetchMyJoinGroupApplications)
+const updateGroupNoticeMock = vi.mocked(updateGroupNotice)
 
 describe('group.store pagination', () => {
   beforeEach(() => {
@@ -163,5 +165,28 @@ describe('group.store pagination', () => {
 
     expect(fetchMyJoinApplicationsMock).toHaveBeenCalledTimes(2)
     expect(store.myJoinApplications).toHaveLength(52)
+  })
+
+  it('updates the group list and active group after saving a notice', async () => {
+    updateGroupNoticeMock.mockResolvedValue({ data: null } as never)
+    const group = {
+      groupUuid: 'group-1',
+      name: '测试群',
+      avatar: '',
+      notice: '旧公告',
+      ownerUuid: 'user-1',
+      memberCount: 2,
+      addMode: 0,
+      muteAll: false
+    }
+    const store = useGroupStore()
+    store.groups = [group]
+    store.activeGroup = group
+
+    await store.updateNotice('group-1', '新公告')
+
+    expect(updateGroupNoticeMock).toHaveBeenCalledWith('group-1', { notice: '新公告' })
+    expect(store.groups[0]?.notice).toBe('新公告')
+    expect(store.activeGroup?.notice).toBe('新公告')
   })
 })

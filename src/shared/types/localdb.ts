@@ -75,3 +75,7 @@ export interface MessageRow {
   payload: JsonObject
   status: number
 }
+
+export interface UpsertMessagesResult {
+  insertedMsgIds: string[]
+}

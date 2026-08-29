@@ -6,6 +6,7 @@ import { toast } from 'vue-sonner'
 import { renderMarkdown } from '../../../shared/utils/markdown'
 import { avatarInitial, avatarPaletteFromId } from '../../../shared/utils/avatar'
 import { resolveAssetUrl } from '../../../shared/utils/asset-url'
+import { writeTextToClipboard } from '../../../shared/utils/clipboard'
 
 const props = defineProps<{
   title: string
@@ -203,7 +204,7 @@ function getSenderName(message: MessageRow): string {
   if (!uuid) return '未知'
   if (uuid === props.currentUserUuid) return '我'
   if (props.groupMembers) {
-    const member = props.groupMembers.find(m => m.userUuid === uuid)
+    const member = props.groupMembers.find((m) => m.userUuid === uuid)
     if (member) {
       return member.groupNickname || member.nickname || uuid.substring(0, 8)
     }
@@ -224,7 +225,7 @@ function getMessageAvatarUrl(message: MessageRow): string {
   }
   const uuid = (message.payload.fromUuid as string) || ''
   if (props.isGroup && props.groupMembers) {
-    const member = props.groupMembers.find(m => m.userUuid === uuid)
+    const member = props.groupMembers.find((m) => m.userUuid === uuid)
     if (member?.avatar) {
       return resolveAssetUrl(member.avatar as string)
     }
@@ -341,24 +342,24 @@ const menuTargetCanRecall = ref(false)
 
 function openMessageMenu(event: MouseEvent, message: MessageRow) {
   if (message.status === 1) return // No menu for recalled messages
-  
+
   event.preventDefault()
   menuTargetMsgId.value = message.msgId
   menuTargetText.value = getText(message)
   menuTargetCanRecall.value = canRecall(message)
-  
+
   const menuWidth = 140
   const menuHeight = 80
   let x = event.clientX
   let y = event.clientY
-  
+
   if (x + menuWidth > window.innerWidth) {
     x = window.innerWidth - menuWidth - 10
   }
   if (y + menuHeight > window.innerHeight) {
     y = window.innerHeight - menuHeight - 10
   }
-  
+
   menuX.value = x
   menuY.value = y
   showMenu.value = true
@@ -394,7 +395,7 @@ onUnmounted(() => {
 
 async function triggerCopy() {
   try {
-    await navigator.clipboard.writeText(menuTargetText.value)
+    await writeTextToClipboard(menuTargetText.value)
     toast.success('已复制到剪贴板')
   } catch (err) {
     toast.error('复制失败，请尝试手动复制')
@@ -419,11 +420,12 @@ function processFiles(files: FileList) {
   for (let i = 0; i < files.length; i++) {
     const file = files[i]
     if (!file) continue
-    
+
     // Detect typical text/developer file extensions
-    const isText = file.type.startsWith('text/') || 
-                   /\.(txt|md|json|js|ts|jsx|tsx|html|css|py|go|rs|c|cpp|h|sh|yml|yaml|xml)$/i.test(file.name)
-                   
+    const isText =
+      file.type.startsWith('text/') ||
+      /\.(txt|md|json|js|ts|jsx|tsx|html|css|py|go|rs|c|cpp|h|sh|yml|yaml|xml)$/i.test(file.name)
+
     if (isText) {
       if (file.size > MAX_TEXT_FILE_BYTES) {
         toast.warning(`“${file.name}” 超过 ${formatBytes(MAX_TEXT_FILE_BYTES)}，请拆分后再导入。`)
@@ -447,11 +449,15 @@ function processFiles(files: FileList) {
       reader.readAsText(file)
     } else {
       // Elegant glassmorphic feedback for media/binary files
-      toast.info(`“${file.name}” 是媒体/二进制文件。当前版本仅支持文本消息发送，已为您提取该文件的基本信息。`, {
-        duration: 5000
-      })
+      toast.info(
+        `“${file.name}” 是媒体/二进制文件。当前版本仅支持文本消息发送，已为您提取该文件的基本信息。`,
+        {
+          duration: 5000
+        }
+      )
       draftProxy.value = normalizeDraft(
-        (draftProxy.value ? draftProxy.value + ' ' : '') + `[文件: ${file.name} (${formatBytes(file.size)})]`
+        (draftProxy.value ? draftProxy.value + ' ' : '') +
+          `[文件: ${file.name} (${formatBytes(file.size)})]`
       )
     }
   }
@@ -474,7 +480,7 @@ function handlePaste(event: ClipboardEvent) {
   if (files.length > 0) {
     event.preventDefault()
     const dataTransfer = new DataTransfer()
-    files.forEach(f => dataTransfer.items.add(f))
+    files.forEach((f) => dataTransfer.items.add(f))
     processFiles(dataTransfer.files)
   }
 }
@@ -615,12 +621,12 @@ const emojiCategories = [
 const filteredEmojis = computed(() => {
   const query = emojiSearchQuery.value.trim().toLowerCase()
   if (!query) {
-    const category = emojiCategories.find(c => c.name === activeEmojiTab.value)
+    const category = emojiCategories.find((c) => c.name === activeEmojiTab.value)
     return category ? category.emojis : []
   }
 
   // Flatten and filter across all categories
-  const allEmojis = emojiCategories.flatMap(c => c.emojis)
+  const allEmojis = emojiCategories.flatMap((c) => c.emojis)
   // Deduplicate and filter
   const seen = new Set<string>()
   const results: typeof allEmojis = []
@@ -652,7 +658,7 @@ function insertEmoji(emojiChar: string) {
   const text = draftProxy.value
 
   draftProxy.value = text.substring(0, startPos) + emojiChar + text.substring(endPos)
-  
+
   // Restore focus and cursor position after insertion
   const newCaretPos = startPos + emojiChar.length
   setTimeout(() => {
@@ -667,7 +673,7 @@ function shouldShowDivider(index: number): boolean {
   const currentMsg = props.messages[index]
   const prevMsg = props.messages[index - 1]
   if (!currentMsg || !prevMsg) return false
-  
+
   // 1. Sent on a different calendar day
   const currentDate = new Date(currentMsg.sendTime)
   const prevDate = new Date(prevMsg.sendTime)
@@ -705,9 +711,13 @@ function formatDividerTime(timestamp: number): string {
 }
 
 // ------ Bubble Quick Actions Helpers ------
-function triggerQuickCopy(text: string) {
-  navigator.clipboard.writeText(text)
-  toast.success('已复制到剪贴板')
+async function triggerQuickCopy(text: string) {
+  try {
+    await writeTextToClipboard(text)
+    toast.success('已复制到剪贴板')
+  } catch {
+    toast.error('复制失败，请尝试手动复制')
+  }
 }
 
 function triggerQuickRecall(msgId: string) {
@@ -788,127 +798,127 @@ watch(draftProxy, () => {
 
     <div class="history-wrap">
       <main ref="historyRef" class="history" @scroll.passive="handleHistoryScroll">
-      <div v-if="props.messages.length > 0" class="history-load-row">
-        <span v-if="props.loadingOlder" class="history-load-pill">正在加载更早消息...</span>
-        <button
-          v-else-if="props.hasMoreBefore"
-          type="button"
-          class="history-load-button"
-          @click="requestOlderMessages"
-        >
-          查看更早消息
-        </button>
-        <span v-else class="history-load-pill history-load-pill--muted">没有更早的消息了</span>
-      </div>
-      <div v-if="props.messages.length === 0" class="empty-state">
-        <span
-          class="empty-avatar"
-          :style="{ background: headerPalette.bg, color: headerPalette.fg }"
-        >
-          {{ avatarInitial(props.title) }}
-        </span>
-        <p class="empty-title">和 {{ props.title || 'TA' }} 打个招呼吧</p>
-        <p class="empty-hint">消息在服务端云端存储，多端同步</p>
-      </div>
-      <div v-else class="message-list">
-        <template v-for="(message, index) in props.messages" :key="message.msgId">
-          <!-- Center Timeline Divider Badge -->
-          <div v-if="shouldShowDivider(index)" class="timeline-divider">
-            <span>{{ formatDividerTime(message.sendTime) }}</span>
-          </div>
-
-          <!-- A. Recalled System notice -->
-          <div v-if="message.status === 1" class="recalled-notice">
-            <span>{{ getText(message) }}</span>
-          </div>
-
-          <!-- B. Normal Chat Bubble -->
-          <article
-            v-else
-            class="bubble-row"
-            :class="{
-              'bubble-row--self': getFrom(message) === 'self',
-              'bubble-row--continued': !isClusterStart(index)
-            }"
+        <div v-if="props.messages.length > 0" class="history-load-row">
+          <span v-if="props.loadingOlder" class="history-load-pill">正在加载更早消息...</span>
+          <button
+            v-else-if="props.hasMoreBefore"
+            type="button"
+            class="history-load-button"
+            @click="requestOlderMessages"
           >
-            <!-- 头像列：聚簇首条显示头像，后续消息占位对齐 -->
-            <div class="avatar-col">
-              <template v-if="isClusterStart(index)">
-                <img
-                  v-if="getMessageAvatarUrl(message)"
-                  :src="getMessageAvatarUrl(message)"
-                  class="msg-avatar"
-                  alt=""
-                />
-                <span
-                  v-else
-                  class="msg-avatar msg-avatar--initial"
-                  :style="getMessageAvatarStyle(message)"
-                >
-                  {{ getMessageAvatarInitial(message) }}
-                </span>
-              </template>
+            查看更早消息
+          </button>
+          <span v-else class="history-load-pill history-load-pill--muted">没有更早的消息了</span>
+        </div>
+        <div v-if="props.messages.length === 0" class="empty-state">
+          <span
+            class="empty-avatar"
+            :style="{ background: headerPalette.bg, color: headerPalette.fg }"
+          >
+            {{ avatarInitial(props.title) }}
+          </span>
+          <p class="empty-title">和 {{ props.title || 'TA' }} 打个招呼吧</p>
+          <p class="empty-hint">消息在服务端云端存储，多端同步</p>
+        </div>
+        <div v-else class="message-list">
+          <template v-for="(message, index) in props.messages" :key="message.msgId">
+            <!-- Center Timeline Divider Badge -->
+            <div v-if="shouldShowDivider(index)" class="timeline-divider">
+              <span>{{ formatDividerTime(message.sendTime) }}</span>
             </div>
 
-            <div class="bubble-container">
-              <span
-                v-if="props.isGroup && getFrom(message) === 'peer' && isClusterStart(index)"
-                class="sender-name"
-              >
-                {{ getSenderName(message) }}
-              </span>
-              <div class="bubble-wrapper group relative">
-                <!-- Floating Glassmorphic Quick Action Bar -->
-                <div class="bubble-action-bar">
-                  <button
-                    type="button"
-                    class="action-btn"
-                    title="复制文本"
-                    @click="triggerQuickCopy(getText(message))"
-                  >
-                    <Copy :size="12" />
-                  </button>
-                  <button
-                    v-if="canRecall(message)"
-                    type="button"
-                    class="action-btn action-btn--danger"
-                    title="撤回消息"
-                    @click="triggerQuickRecall(message.msgId)"
-                  >
-                    <CornerUpLeft :size="12" />
-                  </button>
-                </div>
+            <!-- A. Recalled System notice -->
+            <div v-if="message.status === 1" class="recalled-notice">
+              <span>{{ getText(message) }}</span>
+            </div>
 
-                <button
-                  v-if="message.status === -1"
-                  type="button"
-                  class="failed-retry-btn"
-                  title="发送失败，点击重新发送"
-                  @click="emitResend(message.clientMsgId)"
-                >
-                  <AlertCircle class="alert-icon" :size="18" />
-                </button>
-                <div
-                  class="bubble cursor-pointer"
-                  @contextmenu="openMessageMenu($event, message)"
-                  @dblclick="handleDoubleClickBubble(message)"
-                >
-                  <p class="message-content-html" v-html="renderMarkdown(getText(message))"></p>
-                  <time>{{ getTime(message) }}</time>
-                </div>
+            <!-- B. Normal Chat Bubble -->
+            <article
+              v-else
+              class="bubble-row"
+              :class="{
+                'bubble-row--self': getFrom(message) === 'self',
+                'bubble-row--continued': !isClusterStart(index)
+              }"
+            >
+              <!-- 头像列：聚簇首条显示头像，后续消息占位对齐 -->
+              <div class="avatar-col">
+                <template v-if="isClusterStart(index)">
+                  <img
+                    v-if="getMessageAvatarUrl(message)"
+                    :src="getMessageAvatarUrl(message)"
+                    class="msg-avatar"
+                    alt=""
+                  />
+                  <span
+                    v-else
+                    class="msg-avatar msg-avatar--initial"
+                    :style="getMessageAvatarStyle(message)"
+                  >
+                    {{ getMessageAvatarInitial(message) }}
+                  </span>
+                </template>
               </div>
-              <span
-                v-if="getFrom(message) === 'self' && readReceiptText(message)"
-                class="read-receipt"
-                :class="{ 'read-receipt--read': readReceiptText(message) === '已读' }"
-              >
-                {{ readReceiptText(message) }}
-              </span>
-            </div>
-          </article>
-        </template>
-      </div>
-    </main>
+
+              <div class="bubble-container">
+                <span
+                  v-if="props.isGroup && getFrom(message) === 'peer' && isClusterStart(index)"
+                  class="sender-name"
+                >
+                  {{ getSenderName(message) }}
+                </span>
+                <div class="bubble-wrapper group relative">
+                  <!-- Floating Glassmorphic Quick Action Bar -->
+                  <div class="bubble-action-bar">
+                    <button
+                      type="button"
+                      class="action-btn"
+                      title="复制文本"
+                      @click="triggerQuickCopy(getText(message))"
+                    >
+                      <Copy :size="12" />
+                    </button>
+                    <button
+                      v-if="canRecall(message)"
+                      type="button"
+                      class="action-btn action-btn--danger"
+                      title="撤回消息"
+                      @click="triggerQuickRecall(message.msgId)"
+                    >
+                      <CornerUpLeft :size="12" />
+                    </button>
+                  </div>
+
+                  <button
+                    v-if="message.status === -1"
+                    type="button"
+                    class="failed-retry-btn"
+                    title="发送失败，点击重新发送"
+                    @click="emitResend(message.clientMsgId)"
+                  >
+                    <AlertCircle class="alert-icon" :size="18" />
+                  </button>
+                  <div
+                    class="bubble cursor-pointer"
+                    @contextmenu="openMessageMenu($event, message)"
+                    @dblclick="handleDoubleClickBubble(message)"
+                  >
+                    <p class="message-content-html" v-html="renderMarkdown(getText(message))"></p>
+                    <time>{{ getTime(message) }}</time>
+                  </div>
+                </div>
+                <span
+                  v-if="getFrom(message) === 'self' && readReceiptText(message)"
+                  class="read-receipt"
+                  :class="{ 'read-receipt--read': readReceiptText(message) === '已读' }"
+                >
+                  {{ readReceiptText(message) }}
+                </span>
+              </div>
+            </article>
+          </template>
+        </div>
+      </main>
 
       <!-- 悬浮“回到底部/新消息”按钮：固定在消息可视区右下角 -->
       <transition name="fab-pop">
@@ -920,7 +930,9 @@ watch(draftProxy, () => {
           @click="jumpToLatest"
         >
           <ChevronDown :size="15" />
-          <span v-if="pendingNewCount > 0">{{ pendingNewCount > 99 ? '99+' : pendingNewCount }} 条新消息</span>
+          <span v-if="pendingNewCount > 0"
+            >{{ pendingNewCount > 99 ? '99+' : pendingNewCount }} 条新消息</span
+          >
         </button>
       </transition>
     </div>
@@ -928,7 +940,10 @@ watch(draftProxy, () => {
     <footer class="composer relative">
       <!-- Glassmorphic Reply Quote Card -->
       <transition name="slide-up">
-        <div v-if="repliedMessage" class="reply-quote-card flex items-center justify-between px-6 py-3.5 border-b border-neutral-100 bg-white/70 backdrop-blur-md">
+        <div
+          v-if="repliedMessage"
+          class="reply-quote-card flex items-center justify-between px-6 py-3.5 border-b border-neutral-100 bg-white/70 backdrop-blur-md"
+        >
           <div class="flex items-center gap-3 overflow-hidden">
             <span class="reply-accent-bar" />
             <div class="flex flex-col text-left overflow-hidden">
@@ -940,13 +955,20 @@ watch(draftProxy, () => {
               </span>
             </div>
           </div>
-          <button 
-            type="button" 
+          <button
+            type="button"
             class="p-1 rounded-full text-neutral-400 hover:text-neutral-600 hover:bg-neutral-100 transition duration-150"
             title="取消回复"
             @click="repliedMessage = null"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              stroke-width="2"
+            >
               <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
@@ -959,38 +981,41 @@ watch(draftProxy, () => {
           <!-- Search box -->
           <div class="emoji-picker-search">
             <Search :size="13" class="search-icon" />
-            <input 
-              v-model="emojiSearchQuery" 
-              type="text" 
-              placeholder="搜索表情名称(如:笑,心,smile)..." 
+            <input
+              v-model="emojiSearchQuery"
+              type="text"
+              placeholder="搜索表情名称(如:笑,心,smile)..."
               class="search-input"
             />
-            <button v-if="emojiSearchQuery" type="button" class="search-clear" @click="emojiSearchQuery = ''">
+            <button
+              v-if="emojiSearchQuery"
+              type="button"
+              class="search-clear"
+              @click="emojiSearchQuery = ''"
+            >
               <X :size="13" />
             </button>
           </div>
-          
+
           <!-- Emojis Grid -->
           <div class="emoji-grid scrollbar-thin">
-            <button 
-              v-for="emoji in filteredEmojis" 
-              :key="emoji.char" 
-              type="button" 
+            <button
+              v-for="emoji in filteredEmojis"
+              :key="emoji.char"
+              type="button"
               class="emoji-item"
               :title="emoji.tags"
               @click="insertEmoji(emoji.char)"
             >
               {{ emoji.char }}
             </button>
-            <div v-if="filteredEmojis.length === 0" class="emoji-empty">
-              没有找到匹配的表情
-            </div>
+            <div v-if="filteredEmojis.length === 0" class="emoji-empty">没有找到匹配的表情</div>
           </div>
 
           <!-- Categories Tabs -->
           <div v-if="!emojiSearchQuery" class="emoji-picker-tabs">
-            <button 
-              v-for="cat in emojiCategories" 
+            <button
+              v-for="cat in emojiCategories"
               :key="cat.name"
               type="button"
               class="cat-tab"
@@ -1005,10 +1030,10 @@ watch(draftProxy, () => {
       </transition>
 
       <div class="tool-row">
-        <button 
-          v-for="tool in composerTools" 
-          :key="tool.key" 
-          type="button" 
+        <button
+          v-for="tool in composerTools"
+          :key="tool.key"
+          type="button"
           :title="tool.label"
           :class="{ 'emoji-tool-btn': tool.key === 'emoji' }"
           @click="handleToolClick(tool.key)"
@@ -1028,18 +1053,16 @@ watch(draftProxy, () => {
           @drop.prevent="handleDrop"
           @dragover.prevent
         />
-        <button
-          type="button"
-          class="send-btn"
-          :disabled="!canSend"
-          @click="handleSend"
-        >
+        <button type="button" class="send-btn" :disabled="!canSend" @click="handleSend">
           发送
         </button>
       </div>
       <div class="composer-actions">
         <span class="flex items-center gap-1.5 text-neutral-400">
-          <span class="indicator-lock-dot" :class="{ 'indicator-lock-dot--typing': isTyping }"></span>
+          <span
+            class="indicator-lock-dot"
+            :class="{ 'indicator-lock-dot--typing': isTyping }"
+          ></span>
           <span>{{ isTyping ? '草稿已自动存入本地缓存' : '草稿自动保存 · 消息服务端存储' }}</span>
         </span>
         <span>Enter 发送 · Shift+Enter 换行</span>
@@ -1269,7 +1292,9 @@ watch(draftProxy, () => {
 
 .fab-pop-enter-active,
 .fab-pop-leave-active {
-  transition: opacity 0.18s var(--ease-out), transform 0.22s var(--ease-spring);
+  transition:
+    opacity 0.18s var(--ease-out),
+    transform 0.22s var(--ease-spring);
 }
 
 .fab-pop-enter-from,
@@ -1299,8 +1324,14 @@ watch(draftProxy, () => {
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .bubble-row--self {
@@ -1369,7 +1400,9 @@ watch(draftProxy, () => {
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-full);
-  transition: background var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+  transition:
+    background var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
 }
 
 .failed-retry-btn:hover {
@@ -1387,9 +1420,16 @@ watch(draftProxy, () => {
 }
 
 @keyframes heartBeat {
-  0% { transform: scale(1); }
-  50% { transform: scale(1.12); opacity: 0.85; }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .sender-name {
@@ -1661,7 +1701,9 @@ watch(draftProxy, () => {
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: var(--radius-md);
   padding: 4px;
-  box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.12), 0 8px 12px -6px rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 10px 30px -5px rgba(0, 0, 0, 0.12),
+    0 8px 12px -6px rgba(0, 0, 0, 0.08);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1712,7 +1754,9 @@ watch(draftProxy, () => {
 
 .fade-menu-enter-active,
 .fade-menu-leave-active {
-  transition: opacity 0.12s ease, transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .fade-menu-enter-from {
@@ -1725,10 +1769,13 @@ watch(draftProxy, () => {
   transform: scale(0.98);
 }
 
-
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Markdown Content Styling */
@@ -1891,7 +1938,9 @@ watch(draftProxy, () => {
   flex-direction: column;
   z-index: 50;
   overflow: hidden;
-  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.15), 0 8px 16px -8px rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 10px 40px -10px rgba(0, 0, 0, 0.15),
+    0 8px 16px -8px rgba(0, 0, 0, 0.1);
   transform-origin: bottom left;
 }
 
@@ -2055,14 +2104,15 @@ watch(draftProxy, () => {
 }
 
 .indicator-lock-dot--typing {
-  background-color: #00E583;
+  background-color: #00e583;
   opacity: 1;
-  box-shadow: 0 0 8px #00E583;
+  box-shadow: 0 0 8px #00e583;
   animation: typing-heartbeat 0.8s infinite ease-in-out;
 }
 
 @keyframes typing-heartbeat {
-  0%, 100% {
+  0%,
+  100% {
     transform: scale(1);
     opacity: 0.7;
   }

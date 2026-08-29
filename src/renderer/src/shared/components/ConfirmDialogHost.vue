@@ -98,14 +98,14 @@ onUnmounted(() => {
 }
 
 .dialog-card {
-  width: 360px;
-  max-width: 100%;
+  width: 90%;
+  max-width: 360px;
   background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(0, 0, 0, 0.06);
-  border-radius: 20px;
-  padding: 24px;
+  border-radius: var(--radius-xl);
+  padding: clamp(20px, 5vw, 24px);
   box-shadow: 0 24px 60px -12px rgba(0, 0, 0, 0.35);
   display: flex;
   flex-direction: column;
@@ -207,7 +207,7 @@ onUnmounted(() => {
 }
 
 .dialog-btn:focus-visible {
-  outline: 2px solid rgba(0, 0, 0, 0.35);
+  outline: 3px solid var(--c-primary);
   outline-offset: 2px;
 }
 
